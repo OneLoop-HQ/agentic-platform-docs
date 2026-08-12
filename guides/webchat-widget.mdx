@@ -1,0 +1,112 @@
+---
+title: "Embed the Webchat Widget on Your Site"
+sidebarTitle: "Webchat Widget"
+description: "Create an embeddable chat widget backed by a Feather assistant, verify your domains, and drop it onto any web page with a single script tag."
+---
+
+The webchat widget puts a Feather assistant on your website as a chat bubble — no backend of your own required. You create a widget, allow-list the domains it may run on, and embed a small loader script. Widget conversations are ordinary `chat` conversations on the `webchat_widget` surface.
+
+## Create a widget
+
+Create a widget bound to an assistant (or a team). The `theme`, `copy`, `behavior`, and `limits` objects are free-form configuration for appearance and behavior.
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/webchat/widgets \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Website Support",
+    "agent_id": "<agent_id>",
+    "theme": { "primary_color": "#0A0A0A" },
+    "copy": { "welcome": "Hi! How can we help?" }
+  }'
+```
+
+```json Response
+{
+  "id": "wgt_01hxm2n3pr5qs8t0",
+  "name": "Website Support",
+  "agent_id": "<agent_id>",
+  "public_key": "wpk_live_8fJ2kQ...",
+  "kill_epoch": 0,
+  "is_enabled": true,
+  "domains": []
+}
+```
+
+The `public_key` is safe to expose in the browser — it identifies the widget without granting API access.
+
+---
+
+## Allow-list your domains
+
+The widget only runs on domains you verify. Add a domain, then prove ownership with a DNS TXT record.
+
+<Steps>
+  <Step title="Add the domain">
+    ```bash
+    curl -X POST https://api-sandbox.featherhq.com/v1/webchat/widgets/<widget_id>/domains \
+      -H "x-api-key: <your_api_key>" \
+      -H "Content-Type: application/json" \
+      -d '{ "hostname": "example.com", "include_subdomains": true }'
+    ```
+
+    The response returns a `verification_token` to publish as a DNS TXT record on the hostname.
+  </Step>
+  <Step title="Verify ownership">
+    After adding the TXT record, ask Feather to check it:
+
+    ```bash
+    curl -X POST \
+      https://api-sandbox.featherhq.com/v1/webchat/widgets/<widget_id>/domains/<domain_id>/verify \
+      -H "x-api-key: <your_api_key>"
+    ```
+
+    Once `verification_state` is verified, the widget will load on that domain.
+  </Step>
+</Steps>
+
+---
+
+## Embed the loader
+
+Add the loader script to your page and point it at your widget's `public_key`. The loader injects the chat bubble and runs the conversation in a sandboxed iframe.
+
+```html
+<script
+  src="https://api-sandbox.featherhq.com/webchat/widget/loader.js"
+  data-public-key="wpk_live_8fJ2kQ..."
+  async
+></script>
+```
+
+The browser never sees your API key. The widget mints its own short-lived, origin-checked sessions and enforces your allowed domains and per-widget limits. If you enable the voice test mode in the widget's `behavior` config, the widget can also start a browser voice call.
+
+---
+
+## Operate the widget
+
+| Action | Endpoint |
+|---|---|
+| Rotate the public key | `POST /v1/webchat/widgets/{id}/rotate-key` |
+| Revoke all live sessions | `POST /v1/webchat/widgets/{id}/kill` (bumps `kill_epoch`) |
+| Update appearance/behavior | `PATCH /v1/webchat/widgets/{id}` |
+| Remove a domain | `DELETE /v1/webchat/widgets/{id}/domains/{domain_id}` |
+
+<Note>
+  Disabling the widget, removing a domain, or calling `kill` revokes issued
+  browser sessions. Use `kill` if a `public_key` is ever leaked, then rotate it.
+</Note>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Channels" icon="comments" href="/concepts/channels">
+    How the webchat surface relates to chat, SMS, voice, and email.
+  </Card>
+  <Card title="Build your first assistant" icon="robot" href="/guides/build-your-first-assistant">
+    Create and activate the assistant your widget will talk to.
+  </Card>
+</CardGroup>

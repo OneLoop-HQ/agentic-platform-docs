@@ -1,0 +1,74 @@
+---
+title: "Memory: Long-Term Facts About Your Users"
+sidebarTitle: "Memory"
+description: "Feather extracts durable facts about each end user and recalls them in future conversations. Memory is backed by an in-house facts store you can read and delete."
+---
+
+Memory lets your assistants remember durable facts about an end user across conversations — a stated preference, an account detail, a past issue — so every interaction picks up where the last one left off. Feather extracts these facts as conversations close and recalls the relevant ones at the start of future turns.
+
+<Note>
+  Memory is backed by Feather's **in-house facts store** (PostgreSQL). It is the
+  sole memory backend — there are no third-party memory vendors.
+</Note>
+
+## How memory is scoped
+
+Facts are scoped to a **`(organization, end_user)`** pair — one memory thread per person, persisting across individual conversations. When a conversation contributes a fact, Feather records which session it came from (`source_session_id`) for attribution, but the fact itself belongs to the end user, not the session.
+
+Memory is governed by an organization-level toggle. Turn it on or off with `GET`/`PUT /v1/identity/org/memory` (`{ "memory_enabled": true }`). When it's off, no new facts are ingested and recall is suppressed — but existing facts remain readable and deletable.
+
+You can also toggle memory per assistant revision with the `memory_enabled` field.
+
+---
+
+## Reading memory
+
+| Endpoint | Returns |
+|---|---|
+| `GET /v1/memory/users/{end_user_id}` | All facts for a user (paginated with `limit` + `cursor`) |
+| `GET /v1/memory/sessions/{session_id}/memories` | One session's ingestion outcome and the facts it contributed |
+
+A fact looks like:
+
+```json
+{
+  "id": "fact_01hxk2m3nr5qp4r8xfgt",
+  "fact": "Prefers to be contacted by email, not phone.",
+  "name": "contact_preference",
+  "valid_at": "2026-03-01T12:00:00Z",
+  "invalid_at": null,
+  "source_session_id": "ses_01hxabc987654321fedcba00"
+}
+```
+
+The session view also reports a `state` of `pending`, `synced`, `skipped`, or `suppressed`, so you can tell whether a conversation's facts have been ingested yet.
+
+---
+
+## Deleting memory
+
+Memory deletion is immediate and scoped to the org and user.
+
+| Endpoint | Effect |
+|---|---|
+| `DELETE /v1/memory/users/{end_user_id}` | Purge all derived facts for a user (returns `204`) |
+| `DELETE /v1/memory/users/{end_user_id}/facts/{fact_id}` | Delete a single fact |
+
+<Note>
+  Deleting a user's memory removes the derived facts. It is not a full
+  right-to-be-forgotten erasure of the end user's identity and transcripts — for
+  that, use the identity and [privacy](/concepts/privacy) tooling.
+</Note>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Conversations" icon="comment-dots" href="/concepts/conversations">
+    How turns, closing, and post-session processing produce memory.
+  </Card>
+  <Card title="Privacy & data protection" icon="shield-halved" href="/concepts/privacy">
+    Control PII scrubbing and data retention across memory, transcripts, and audio.
+  </Card>
+</CardGroup>

@@ -1,0 +1,220 @@
+---
+title: "Build and Deploy Your First Feather Assistant"
+sidebarTitle: "First Assistant"
+description: "Create an assistant with a system prompt, attach a knowledge base, add a custom tool, activate a revision, and run it — step by step."
+---
+
+A Feather assistant is made up of a few composable pieces: an **assistant** record that holds identity, one or more **revisions** that define behavior (system prompt, knowledge bases, tools, policies), and a pointer to the **active revision** that runs in production. Creating an assistant provisions the record and an initial revision in one call — you then attach resources and **activate** the revision to go live. This guide builds a fully configured assistant from scratch.
+
+<Steps>
+
+  <Step title="Create a knowledge base">
+    Knowledge bases store the documents your assistant searches at runtime. Create one for your product documentation now — you'll attach it to the assistant in the next step.
+
+    <CodeGroup>
+    ```bash cURL
+    curl -X POST https://api-sandbox.featherhq.com/v1/knowledge-base/knowledge-bases \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Product Docs",
+        "description": "Our product documentation"
+      }'
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "id": "kb_01hx4mno5pqrstuvwxyz0001",
+      "name": "Product Docs",
+      "description": "Our product documentation",
+      "document_count": 0,
+      "created_at": "2026-05-14T10:24:00Z"
+    }
+    ```
+
+    The knowledge base is empty for now. See [Ingest Documents](/guides/ingest-documents) to populate it with files, text, or external sources like Notion.
+  </Step>
+
+  <Step title="Register a custom tool">
+    Tools let your assistant call external APIs mid-conversation — for example, looking up an order. Register an HTTP tool with a request template and an input variable.
+
+    <CodeGroup>
+    ```bash cURL
+    curl -X POST https://api-sandbox.featherhq.com/v1/tools \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "lookup_order",
+        "description": "Look up the status of a customer order by order ID.",
+        "tool_type": "api_call",
+        "configuration": {
+          "url": "https://api.yourstore.com/orders/{{order_id}}",
+          "method": "GET",
+          "headers": [
+            { "key": "Authorization", "value": "Bearer sk_live_your_store_api_key", "secure": true }
+          ],
+          "variables": [
+            { "name": "order_id", "description": "The order ID to look up", "type": "str", "required": true }
+          ]
+        }
+      }'
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "id": "tool_01hx6orderlookup12345678",
+      "name": "lookup_order",
+      "tool_type": "api_call",
+      "created_at": "2026-05-14T10:30:00Z"
+    }
+    ```
+
+    Mark secrets in headers or query params with `secure: true` — Feather encrypts them at rest. The assistant fills `{{order_id}}` from the conversation at call time.
+  </Step>
+
+  <Step title="Create the assistant">
+    Create the assistant with a system prompt, the knowledge base, and the tool attached. Feather provisions the assistant, an initial revision (with everything you passed), and a bound workflow, and returns all three.
+
+    <CodeGroup>
+    ```bash cURL
+    curl -X POST https://api-sandbox.featherhq.com/v1/assistants \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Customer Support Bot",
+        "description": "Helps customers with account and order questions",
+        "system_prompt": "You are a helpful customer support assistant. Be polite and concise. If you do not know the answer, say so.",
+        "knowledge_base_refs": [
+          { "id": "kb_01hx4mno5pqrstuvwxyz0001", "description": "Product documentation for answering customer questions" }
+        ],
+        "tool_refs": [
+          { "kind": "api", "id": "tool_01hx6orderlookup12345678" }
+        ]
+      }'
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "agent": {
+        "id": "agt_01hx3k2mz9vbqwerty123456",
+        "name": "Customer Support Bot",
+        "active_revision_id": null
+      },
+      "agent_revision": {
+        "id": "rev_01hx3k9pq7rstuv234567890",
+        "agent_id": "agt_01hx3k2mz9vbqwerty123456",
+        "knowledge_base_refs": [ { "id": "kb_01hx4mno5pqrstuvwxyz0001" } ],
+        "tool_refs": [ { "kind": "api", "id": "tool_01hx6orderlookup12345678" } ]
+      },
+      "workflow_revision_id": "wfr_01hx2rp7wy3nk9dbrs0abcd12"
+    }
+    ```
+
+    The assistant is created **inactive** (`active_revision_id` is `null`). Save `agent.id` and `agent_revision.id`.
+  </Step>
+
+  <Step title="Activate the revision">
+    Activating the revision points the assistant's `active_revision_id` at it and makes it handle all new conversations.
+
+    <CodeGroup>
+    ```bash cURL
+    curl -X POST \
+      https://api-sandbox.featherhq.com/v1/assistants/agt_01hx3k2mz9vbqwerty123456/revisions/rev_01hx3k9pq7rstuv234567890/activate \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{ "activation_reason": "initial launch" }'
+    ```
+    </CodeGroup>
+
+    A subsequent `GET /v1/assistants/agt_01hx3k2mz9vbqwerty123456` now shows `active_revision_id` pointing to this revision. There is no separate "publish" step — activation is what makes a revision live.
+  </Step>
+
+  <Step title="Run a conversation">
+    Start a conversation and send a turn to see your assistant in action.
+
+    <CodeGroup>
+    ```bash Start + send
+    # Open a conversation
+    curl -X POST https://api-sandbox.featherhq.com/v1/conversations \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{ "assistant_id": "agt_01hx3k2mz9vbqwerty123456", "org_external_end_user_id": "customer-42" }'
+
+    # Send a turn (use the id from the response above)
+    curl -X POST https://api-sandbox.featherhq.com/v1/conversations/<conversation_id>/turns \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{ "user_message": "What features do you offer?" }'
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "turn_id": "trn_01hx5abc123def456ghi789",
+      "text": "Great question! Our platform offers real-time conversation management, AI-powered knowledge retrieval, custom tool integrations, and seamless human handoff. Is there a specific feature you'd like to know more about?",
+      "session_status": "active",
+      "message_seqs": [0, 1]
+    }
+    ```
+
+    <Note>
+      API-key callers create `live` conversations. For isolated development
+      testing that stays out of production analytics, use the dashboard test chat.
+      See [Run a Conversation](/guides/run-a-conversation) for streaming, polling,
+      and closing conversations.
+    </Note>
+  </Step>
+
+</Steps>
+
+---
+
+## Iterating with revisions
+
+To change your assistant's behavior, don't edit the live revision — create a new one, configure it, and activate it. Previous revisions stay available for instant rollback.
+
+<Steps>
+  <Step title="Create a new revision from the current one">
+    ```bash
+    curl -X POST https://api-sandbox.featherhq.com/v1/assistants/agt_01hx3k2mz9vbqwerty123456/revisions \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{ "based_on_revision_id": "rev_01hx3k9pq7rstuv234567890", "name": "v2" }'
+    ```
+  </Step>
+  <Step title="Update its configuration">
+    Patch the new revision — for example, refine the prompt or attach another tool.
+
+    ```bash
+    curl -X PATCH https://api-sandbox.featherhq.com/v1/assistants/agt_01hx3k2mz9vbqwerty123456/revisions/<new_revision_id> \
+      -H "x-api-key: $FEATHER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{ "system_prompt": "You are a helpful support assistant. Always confirm the order number before looking it up." }'
+    ```
+  </Step>
+  <Step title="Activate it">
+    Activate the new revision to roll it out. To roll back, activate any earlier revision.
+  </Step>
+</Steps>
+
+<Tip>
+  You can attach multiple tools and knowledge bases to a single revision. The
+  assistant decides which to use based on the conversation and the `description`
+  you set on each reference.
+</Tip>
+
+---
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card title="Ingest documents" icon="book-open" href="/guides/ingest-documents">
+    Upload files, paste text, or sync from Notion and Google Drive into your knowledge base.
+  </Card>
+  <Card title="Run a conversation" icon="messages" href="/guides/run-a-conversation">
+    Open conversations, stream responses, poll, and close — with full code examples.
+  </Card>
+</CardGroup>

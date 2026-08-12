@@ -1,0 +1,60 @@
+---
+title: "Analytics: Measure Everything Your Assistants Do"
+sidebarTitle: "Analytics"
+description: "Feather exposes read-only analytics across sessions, tools, voice, knowledge, model routing, and more — as timeseries, breakdowns, and dashboard summaries."
+---
+
+Feather records rich operational data about every conversation, tool call, retrieval, and model invocation, and exposes it through a large family of read-only analytics endpoints under `/v1/analytics`. Use them to build dashboards, monitor quality and cost, and spot regressions.
+
+All analytics endpoints are `GET`, org-scoped, and require the `analytics:read` permission. Most support a time range and return either a **timeseries**, a **breakdown**, or a rolled-up **dashboard** summary.
+
+## Analytics domains
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="comments">
+    `/v1/analytics/sessions` — volume, channel mix, resolution and first-response time, escalation rate, turn depth.
+  </Card>
+  <Card title="Tools" icon="wrench">
+    `/v1/analytics/tools` — invocation counts, latency, error and retry rates, reliability rankings per tool.
+  </Card>
+  <Card title="Voice" icon="phone">
+    `/v1/analytics/voice` — call volume, answer rate, outcomes, and warm-transfer performance.
+  </Card>
+  <Card title="Knowledge" icon="database">
+    `/v1/analytics/knowledge` — retrieval volume, top documents, ingestion and freshness metrics.
+  </Card>
+  <Card title="Model router" icon="microchip">
+    `/v1/analytics/model-router` — cost by model, provider, assistant, and operation; latency, TTFT, fallbacks, and cache savings.
+  </Card>
+  <Card title="Policies" icon="shield-halved">
+    `/v1/analytics/policies` — violation rates, action breakdowns, and monitor-mode rollout tracking.
+  </Card>
+  <Card title="Integrations & mocks" icon="plug">
+    `/v1/analytics/integrations` and `/v1/analytics/mocks` — connection health, invocation success, and mock match rates.
+  </Card>
+  <Card title="Memory" icon="brain">
+    `/v1/analytics/memory` — memory coverage and ingestion over time.
+  </Card>
+</CardGroup>
+
+---
+
+## Knowledge gaps
+
+Beyond usage metrics, Feather clusters unanswered or low-confidence questions into **knowledge gaps** so you know what content to add. Query them under `/v1/knowledge-gaps`: a summary, the clusters themselves, per-cluster evidence and lifecycle (owner, status), and document-health signals.
+
+---
+
+## Using the data
+
+The analytics surface is broad — one endpoint per metric and view — so the fastest way to find what you need is the API reference. Each endpoint documents its exact query parameters (time range, bucket granularity, filters) and response shape.
+
+<Card title="Analytics API reference" icon="chart-bar" href="/api-reference/analytics/per-channel-comparison-of-session-volume-and-quality">
+  Browse every analytics endpoint, its filters, and its response schema.
+</Card>
+
+<Note>
+  Analytics endpoints are read-only reporting views. To act on data — retry a
+  tool, re-run an evaluation, purge a conversation — use the corresponding
+  feature API.
+</Note>

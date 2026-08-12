@@ -4,7 +4,7 @@ sidebarTitle: "Ingest Documents"
 description: "Upload files, paste text, or sync from Notion and Google Drive into a Feather knowledge base. Track ingestion status and search your indexed content."
 ---
 
-Feather's knowledge base pipeline accepts documents from virtually any source — local files, raw text, and third-party platforms like Notion, Google Drive, and S3. Once ingested, documents are chunked, embedded, and indexed so your agents can perform semantic search at inference time. This guide covers the full ingestion lifecycle: uploading content, tracking job status, connecting external sources, and validating results with a live search query.
+Feather's knowledge base pipeline accepts documents from virtually any source — local files, raw text, and third-party platforms like Notion, Google Drive, and S3. Once ingested, documents are chunked, embedded, and indexed so your assistants can perform semantic search at inference time. This guide covers the full ingestion lifecycle: uploading content, tracking job status, connecting external sources, and validating results with a live search query.
 
 ---
 
@@ -106,7 +106,7 @@ curl https://api-sandbox.featherhq.com/v1/knowledge-base/ingestion-jobs/job_01hx
 
 | Field | Description |
 |---|---|
-| `status` | `queued` · `processing` · `completed` · `failed` |
+| `status` | `queued` · `processing` → terminal `completed` · `partial_failure` · `failed` · `duplicate` · `quarantined` |
 | `total_documents` | Total items submitted in this job |
 | `completed` | Documents successfully embedded and indexed |
 | `failed` | Documents that encountered an error |
@@ -174,7 +174,7 @@ For Notion pages, Google Drive folders, and S3 buckets, Feather syncs content au
     }
     ```
 
-    Supported values for `provider`: `notion`, `google_drive`, `s3`.
+    Supported values for `provider`: `notion`, `google_drive`, `s3`, and `url` (web pages). `notion` and `google_drive` require an active integration connection; `s3` accepts inline credentials and `url` needs no connection.
   </Step>
 
   <Step title="Add roots">
@@ -237,7 +237,7 @@ For Notion pages, Google Drive folders, and S3 buckets, Feather syncs content au
 
 ## Search your knowledge base
 
-Before connecting a knowledge base to an agent, validate that your content is indexed and returning relevant results.
+Before connecting a knowledge base to an assistant, validate that your content is indexed and returning relevant results.
 
 <CodeGroup>
 ```bash cURL
@@ -295,16 +295,16 @@ curl -X POST https://api-sandbox.featherhq.com/v1/knowledge-base/search \
 | `chunk_id` | Unique ID of the retrieved text chunk |
 | `document_title` | Title assigned during ingestion |
 | `content` | The raw text of the chunk |
-| `score` | Semantic similarity score (0–1). Higher is more relevant |
+| `score` | Relevance score (hybrid dense/sparse). Higher is more relevant; not a normalized 0–1 cosine |
 
 <Warning>
-  A high `score` means the chunk is semantically similar to the query — not that it's factually correct. Always review new knowledge bases manually before enabling them in production agents.
+  A high `score` means the chunk is semantically similar to the query — not that it's factually correct. Always review new knowledge bases manually before enabling them in production assistants.
 </Warning>
 
 ---
 
 ## What's next?
 
-<Card title="Knowledge Base API Reference" icon="book" href="/api-reference/knowledge-base/ingest-documents-text-files-or-mixed">
+<Card title="Knowledge Base API Reference" icon="book" href="/api-reference/knowledge-base/create-a-knowledge-base">
   Full endpoint reference for knowledge bases, ingestion jobs, sources, and search.
 </Card>

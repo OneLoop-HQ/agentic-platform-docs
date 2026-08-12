@@ -1,10 +1,10 @@
 ---
-title: "Connect Third-Party Integrations to Your Agents"
+title: "Connect Third-Party Integrations to Your Assistants"
 sidebarTitle: "Connect Integration"
-description: "Add Slack, Notion, Twilio, Google Drive, and custom MCP servers to Feather. Give your agents real-world tools backed by your existing services."
+description: "Add Slack, Notion, Twilio, Google Drive, and custom MCP servers to Feather. Give your assistants real-world tools backed by your existing services."
 ---
 
-Integrations extend your agents beyond conversation — they let your AI act on the world by calling real APIs, sending messages, querying documents, and triggering workflows inside the tools your team already uses. Feather's integration layer handles OAuth flows, credential storage, and tool schema sync so you can focus on building agent logic rather than plumbing.
+Integrations extend your assistants beyond conversation — they let your AI act on the world by calling real APIs, sending messages, querying documents, and triggering workflows inside the tools your team already uses. Feather's integration layer handles OAuth flows, credential storage, and tool schema sync so you can focus on building assistant logic rather than plumbing.
 
 ## Browse available integrations
 
@@ -186,7 +186,7 @@ Most first-party integrations use OAuth. Feather delegates the OAuth handshake t
     ```
     </CodeGroup>
 
-    Feather will immediately sync the tool schema for your new connection. Tools are ready to attach to agents within seconds.
+    Feather will immediately sync the tool schema for your new connection. Tools are ready to attach to assistants within seconds.
   </Step>
 </Steps>
 
@@ -341,7 +341,7 @@ requests.get(
 
 ### Disable or enable individual tools
 
-Prevent an agent from calling specific tools without disconnecting the entire integration. The path takes the tool's `id` (the UUID from the connection's `tools` array), not its slug:
+Prevent an assistant from calling specific tools without disconnecting the entire integration. The path takes the tool's `id` (the UUID from the connection's `tools` array), not its slug:
 
 ```bash
 curl -X PATCH \
@@ -365,7 +365,7 @@ curl -X PATCH \
 
 ## Test a tool
 
-Before attaching a tool to an agent, verify it works end-to-end using the test invoke endpoint.
+Before attaching a tool to an assistant, verify it works end-to-end using the test invoke endpoint.
 
 <CodeGroup>
 ```bash cURL
@@ -412,13 +412,13 @@ requests.post(
 }
 ```
 
-The `result` field is the full vendor API response. `narrowed` is the field-map filtered result that your agent actually receives — only the fields relevant to decision-making.
+The `result` field is the full vendor API response. `narrowed` is the field-map filtered result that your assistant actually receives — only the fields relevant to decision-making.
 
 ---
 
-## Attach integration tools to an agent
+## Attach integration tools to an assistant
 
-Reference integration tools in your agent revision's `tool_refs` array using the tool's slug. Each tool slug is built as `{nickname_slug}_{tool_slug}` — the connection nickname slugified (lowercased, non-alphanumeric runs collapsed to underscores) joined to the slugified tool path with an underscore. A connection nicknamed "My Slack Workspace" therefore produces slugs like `my_slack_workspace_send_message`.
+Reference integration tools in your assistant revision's `tool_refs` array using the tool's slug. Each tool slug is built as `{nickname_slug}_{tool_slug}` — the connection nickname slugified (lowercased, non-alphanumeric runs collapsed to underscores) joined to the slugified tool path with an underscore. A connection nicknamed "My Slack Workspace" therefore produces slugs like `my_slack_workspace_send_message`.
 
 ```json
 {
@@ -439,7 +439,7 @@ Reference integration tools in your agent revision's `tool_refs` array using the
 }
 ```
 
-The agent will automatically receive the tool's input schema in its context and can invoke it during a conversation without any additional wiring.
+The assistant will automatically receive the tool's input schema in its context and can invoke it during a conversation without any additional wiring.
 
 <Tip>
   If an integration provider adds new tools or changes their schema, use `POST /v1/integrations/connections/{connection_id}/refresh-tools` to manually re-sync. This is useful when building against a frequently updated MCP server.

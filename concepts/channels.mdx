@@ -1,0 +1,73 @@
+---
+title: "Channels: One Session Model Across Every Medium"
+sidebarTitle: "Channels"
+description: "Chat, SMS, voice, and email all map to the same Feather conversation. Learn how channel, surface, and identity fit together."
+---
+
+Feather runs every customer interaction through the same [conversation](/concepts/conversations) model, regardless of how the customer reaches you. A conversation is classified by a few server-assigned facts that together describe where and how it runs.
+
+## How a conversation is classified
+
+| Attribute | Values | Meaning |
+|---|---|---|
+| `channel` | `chat`, `sms`, `voice`, `email` | The medium |
+| `surface` | `webchat_widget`, `direct_api`, `mcp`, `dashboard`, `simulation`, `phone_line`, `mailbox` | Where the session physically runs |
+| `origin` | `inbound`, `outbound` | Who initiated it |
+
+You don't set `channel` or `surface` directly — Feather assigns them based on how the conversation is created. Creating one over the API (`POST /v1/conversations`) always yields a `chat` conversation on the `direct_api` surface.
+
+---
+
+## Where each channel is created
+
+Each channel has its own entry point, but they all produce the same conversation object with the same turns, transcript, analytics, and HITL behavior.
+
+<CardGroup cols={2}>
+  <Card title="Chat" icon="comments" href="/guides/run-a-conversation">
+    Created with `POST /v1/conversations`. Powers your own app (surface `direct_api`) and the embeddable webchat widget (surface `webchat_widget`).
+  </Card>
+  <Card title="SMS" icon="mobile" href="/guides/sms-channel">
+    Outbound via `POST /v1/sms/send`; inbound arrives on your Twilio number. Each number maps to a conversation per end user.
+  </Card>
+  <Card title="Voice" icon="phone" href="/guides/voice-calls">
+    Created by inbound calls to a bound number or by `POST /v1/voice/outbound`. Voice adds a `transport` of `sip` (phone) or `web` (browser).
+  </Card>
+  <Card title="Email" icon="envelope" href="/guides/email-channel">
+    Inbound mail creates or continues a thread on the `mailbox` surface; replies go out from your connected mailbox.
+  </Card>
+</CardGroup>
+
+---
+
+## Identity across channels
+
+Every conversation resolves to an `end_user_id`. How that happens depends on what you provide at creation:
+
+- **`end_user_id`** — reference a known end user directly.
+- **`org_external_end_user_id`** — pass your own stable identifier (a customer ID, or a persisted anonymous browser token). Feather get-or-creates an end user and, when possible, **bridges** it to the same person's existing email or phone identity.
+- **Nothing** — Feather resolves the authenticated caller as the end user.
+
+Because a phone number, an email address, and your own customer ID can all resolve to the same end user, an assistant gets a unified view of that person across channels — a customer who texts today and emails next week shares one history and one memory.
+
+### Thread keys
+
+Within a channel, `external_id` distinguishes concurrent threads for the same user. Reusing a value resumes that thread; a new value opens another. `external_id` is unique per organization, which also makes conversation creation idempotent under retries.
+
+<Note>
+  For anonymous webchat visitors, send a **stable per-visitor token** in
+  `org_external_end_user_id`. A new value on every page load creates a new
+  identity and loses history and memory.
+</Note>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Conversations" icon="comment-dots" href="/concepts/conversations">
+    The full conversation object, status lifecycle, and turn model.
+  </Card>
+  <Card title="Embed the webchat widget" icon="window-maximize" href="/guides/webchat-widget">
+    Drop a Feather assistant onto your website with the embeddable widget.
+  </Card>
+</CardGroup>

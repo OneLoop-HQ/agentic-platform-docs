@@ -1,0 +1,87 @@
+---
+title: "Export Conversation Transcripts"
+sidebarTitle: "Export Conversations"
+description: "Request a bulk, encrypted export of conversation transcripts filtered by date and channel, then download the files with per-file tokens."
+---
+
+For analytics, compliance, or backup, export conversation transcripts in bulk. Exports run asynchronously: you request one over a date window, poll until it finishes, then download the resulting files with short-lived, per-file tokens.
+
+<Note>
+  Exports require the `conversations:export` permission, and an organization can
+  have only one active export at a time (`409` otherwise).
+</Note>
+
+## Request an export
+
+Provide a required `start`/`end` window and, optionally, the same filters available on the conversation list (channel, status, end user, and more).
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/conversations/exports \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "export_format": "ndjson",
+    "start": "2026-07-01T00:00:00Z",
+    "end": "2026-08-01T00:00:00Z",
+    "channel": "voice"
+  }'
+```
+
+The endpoint returns `202` with a job object. `export_format` is `csv` (default) or `ndjson`.
+
+---
+
+## Poll for completion
+
+Poll the job until its `status` is terminal:
+
+```bash
+curl https://api-sandbox.featherhq.com/v1/conversations/exports/<export_id> \
+  -H "x-api-key: <your_api_key>"
+```
+
+```json
+{
+  "id": "exp_01hxp2q3rs5t8u0",
+  "status": "succeeded",
+  "export_format": "ndjson",
+  "total_rows": 1842,
+  "files": [
+    { "name": "conversations-000.ndjson", "download_token": "..." }
+  ],
+  "expires_at": "2026-08-02T00:00:00Z"
+}
+```
+
+Status moves through `pending` → `running` → `succeeded` (or `partial`, `failed`, `expired`). Once it's `succeeded` or `partial`, the `files` array carries a `download_token` per file.
+
+---
+
+## Download the files
+
+Download each file with its token before the export expires:
+
+```bash
+curl "https://api-sandbox.featherhq.com/v1/conversations/exports/<export_id>/download/conversations-000.ndjson?token=<download_token>" \
+  -H "x-api-key: <your_api_key>" \
+  -o conversations-000.ndjson
+```
+
+<Tip>
+  For a single conversation's transcript, use the paginated
+  `GET /v1/conversations/{id}/turns` endpoint instead — see
+  [Run a Conversation](/guides/run-a-conversation#retrieve-the-transcript).
+</Tip>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Privacy & data protection" icon="shield-halved" href="/concepts/privacy">
+    Set retention policies that govern how long transcripts are kept.
+  </Card>
+  <Card title="Analytics" icon="chart-bar" href="/concepts/analytics">
+    Query aggregate metrics without exporting raw transcripts.
+  </Card>
+</CardGroup>

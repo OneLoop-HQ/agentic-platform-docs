@@ -1,0 +1,81 @@
+---
+title: "Route Notifications to Slack"
+sidebarTitle: "Notifications"
+description: "Get notified when important events happen — evaluation failures, escalations, and more — delivered to your Slack channels with per-type controls."
+---
+
+Feather can notify your team when noteworthy events happen — an evaluation fails, a conversation escalates, a tool starts erroring. You choose which event types to enable, where they go, and how they're batched. Delivery is to **Slack** in the current version.
+
+## Connect a destination
+
+A destination is a Slack channel Feather posts to, backed by a Slack [integration connection](/guides/connect-an-integration). Discover the channels your Slack app can post to, then create a destination:
+
+```bash
+# Discover postable Slack channels
+curl "https://api-sandbox.featherhq.com/v1/notifications/destinations/discover?channel_kind=slack&connection_id=<conn_id>" \
+  -H "x-api-key: <your_api_key>"
+
+# Create a destination
+curl -X POST https://api-sandbox.featherhq.com/v1/notifications/destinations \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel_kind": "slack",
+    "target_id": "C08ABCDEF",
+    "target_label": "#alerts",
+    "connection_id": "<conn_id>"
+  }'
+```
+
+Feather verifies a new destination with a test post before saving it.
+
+---
+
+## Enable and route event types
+
+Browse the catalog of notification event types with `GET /v1/notifications/types`. Each type has a category, default severity, and payload schema, merged with your org's configuration.
+
+The fastest start is to enable the recommended set:
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/notifications/types/enable-recommended \
+  -H "x-api-key: <your_api_key>"
+```
+
+Then tune an individual type — turn it on, adjust severity, batch it, or rate-limit it:
+
+```bash
+curl -X PUT https://api-sandbox.featherhq.com/v1/notifications/types/<event_type>/config \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "severity_override": "high",
+    "delivery_mode": "immediate",
+    "rate_limit_per_hour": 20
+  }'
+```
+
+`delivery_mode` is `immediate`, `hourly_digest`, or `daily_digest`. Route an event type to a specific destination with `PUT /v1/notifications/routes` (`{ event_type, destination_id, enabled }`); events without a route fall back to your default destination.
+
+---
+
+## Settings, templates, and testing
+
+- **Settings** — `GET`/`PUT /v1/notifications/settings` set the `default_destination_id`, timezone, quiet hours, and digest send time.
+- **Templates** — customize the message per event type and channel with `GET`/`PUT /v1/notifications/types/{event_type}/template`. Preview and validate before saving with `.../template/preview` and `.../template/validate`.
+- **Test** — fire a real notification synchronously with `POST /v1/notifications/types/{event_type}/test-send`.
+- **Delivery log** — see what was sent (and why something wasn't) with `GET /v1/notifications/delivery-log`.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Evaluations" icon="chart-bar" href="/guides/evaluations">
+    Evaluation failures are a common notification trigger.
+  </Card>
+  <Card title="Connect an integration" icon="plug" href="/guides/connect-an-integration">
+    Connect Slack so notifications have somewhere to go.
+  </Card>
+</CardGroup>
