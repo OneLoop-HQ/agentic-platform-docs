@@ -34,23 +34,39 @@
           {
             "group": "Core Concepts",
             "pages": [
-              "concepts/agents",
+              "concepts/assistants",
               "concepts/knowledge-bases",
               "concepts/conversations",
+              "concepts/channels",
+              "concepts/memory",
               "concepts/workflows",
-              "concepts/policies"
+              "concepts/policies",
+              "concepts/privacy",
+              "concepts/analytics"
             ]
           },
           {
             "group": "Guides",
             "pages": [
-              "guides/build-your-first-agent",
+              "guides/build-your-first-assistant",
               "guides/ingest-documents",
               "guides/run-a-conversation",
-              "guides/connect-an-integration",
-              "guides/voice-calls",
               "guides/human-in-the-loop",
-              "guides/evaluations"
+              "guides/connect-an-integration",
+              "guides/connect-mcp",
+              "guides/evaluations",
+              "guides/mocks",
+              "guides/notifications",
+              "guides/export-conversations"
+            ]
+          },
+          {
+            "group": "Channels",
+            "pages": [
+              "guides/webchat-widget",
+              "guides/voice-calls",
+              "guides/sms-channel",
+              "guides/email-channel"
             ]
           }
         ]

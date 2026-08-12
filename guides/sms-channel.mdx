@@ -1,0 +1,75 @@
+---
+title: "Send and Receive SMS"
+sidebarTitle: "SMS Channel"
+description: "Send outbound SMS from a Feather assistant, receive inbound texts on your Twilio number, and configure per-country and length limits."
+---
+
+Feather runs SMS as a conversation channel on top of your Twilio number. Inbound texts create or continue a conversation; your assistant replies as outbound SMS.
+
+## Register and bind a number
+
+SMS requires a phone number with the `sms` capability, bound to an assistant. Register the number and add an SMS channel binding (the same flow as [voice](/guides/voice-calls#register-a-phone-number)):
+
+```bash
+# Register the number (once)
+curl -X POST https://api-sandbox.featherhq.com/v1/communication/phone-numbers \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "phone_e164": "+15555550100", "vendor": "twilio", "vendor_mode": "byo", "capabilities": ["sms"] }'
+
+# Bind an assistant so inbound texts route to it
+curl -X POST \
+  https://api-sandbox.featherhq.com/v1/communication/phone-numbers/<phone_number_id>/channels \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "channel_type": "sms", "agent_id": "<agent_id>" }'
+```
+
+Inbound messages to a bound number now create an SMS conversation and run through the assistant automatically.
+
+---
+
+## Send an outbound SMS
+
+Start an outbound message with `POST /v1/sms/send`. The send is queued asynchronously (`202`).
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/sms/send \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_number": "+15555550100",
+    "to": "+15555550123",
+    "body": "Your order has shipped and will arrive Friday.",
+    "agent_id": "<agent_id>",
+    "idempotency_key": "order-12345-shipped"
+  }'
+```
+
+Pass `media_urls` to send MMS, and an `idempotency_key` to make retries safe. If the recipient replies, their text continues the conversation and your assistant handles it.
+
+---
+
+## Settings
+
+Control country and length limits with `GET`/`PUT /v1/sms/settings`:
+
+```bash
+curl -X PUT https://api-sandbox.featherhq.com/v1/sms/settings \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "allowed_countries": ["US", "CA"], "max_message_length": 480 }'
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Channels" icon="comments" href="/concepts/channels">
+    How SMS maps to the unified conversation model and identity.
+  </Card>
+  <Card title="Run a conversation" icon="comment-dots" href="/guides/run-a-conversation">
+    Inspect turns, poll messages, and review transcripts for any channel.
+  </Card>
+</CardGroup>

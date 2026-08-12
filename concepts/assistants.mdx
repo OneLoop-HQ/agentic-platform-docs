@@ -1,0 +1,183 @@
+---
+title: "Assistants: The Core AI Units of Feather"
+sidebarTitle: "Assistants"
+description: "Assistants are the AI actors in Feather. Each assistant bundles a persona, system prompt, knowledge bases, tools, and policies — versioned through revisions and optionally driven by a workflow."
+---
+
+Assistants are the primary AI actors in the Feather platform. An assistant bundles an **agent** (a persona and system prompt) with an optional **workflow** (a structured conversation graph) as a single unit. Every interaction your end users have with Feather flows through an assistant.
+
+## What is an assistant?
+
+An assistant combines identity with capability. At its core, an assistant carries:
+
+- **A persona** — a name, description, and `persona` string that shape how the assistant presents itself.
+- **A system prompt** — instructions that shape the assistant's tone, role, and behavior.
+- **Knowledge bases** — indexed document collections the assistant retrieves from at runtime (`knowledge_base_refs`).
+- **Tools** — API, integration, utility, or knowledge-base tools the assistant can invoke (`tool_refs`).
+- **Policies** — guardrails that run at defined enforcement points to control what the assistant says and does (`policy_refs`).
+- **A workflow** — an optional graph that drives multi-step, structured conversations. Creating an assistant provisions a bound workflow automatically; you enable it per revision with `workflow_enabled`.
+
+Because assistants run in production alongside real user data, Feather uses a revision model to keep changes auditable and rollbacks safe.
+
+<Note>
+  The API resource is `/v1/assistants`. For historical reasons the path
+  variable is spelled `{agent_id}` — for example `GET /v1/assistants/{agent_id}`.
+  The two refer to the same thing.
+</Note>
+
+---
+
+## The revision model
+
+Every assistant has two layers of identity:
+
+| Layer | Mutability | Purpose |
+|---|---|---|
+| **Assistant (agent) record** | Mutable | Stores name, description, metadata, and a pointer to the active revision |
+| **Revision** | The configuration snapshot | Stores system prompt, KB refs, tool refs, policy refs, model settings, and channel config |
+
+When you create an assistant, Feather provisions an initial revision automatically — but the assistant starts **inactive** (`active_revision_id` is `null`). You configure a revision, then **activate** it to make the assistant serve traffic.
+
+<Warning>
+  There is no "publish" step. You make a revision live by **activating** it:
+  `POST /v1/assistants/{agent_id}/revisions/{revision_id}/activate`. Activation
+  simply points the assistant's `active_revision_id` at that revision.
+</Warning>
+
+A revision has no separate `status` field — a revision is "active" if and only if the assistant's `active_revision_id` points to it. All other revisions are editable configuration you can iterate on and activate later.
+
+### Revision lifecycle
+
+<Steps>
+  <Step title="Create a revision">
+    Call `POST /v1/assistants/{agent_id}/revisions`. Pass `based_on_revision_id` to branch from an existing revision, or omit it to start fresh.
+  </Step>
+  <Step title="Configure the revision">
+    Call `PATCH /v1/assistants/{agent_id}/revisions/{revision_id}` to set `system_prompt`, attach `knowledge_base_refs` and `tool_refs`, and set `model_settings`, `channel_specific_config`, and `platform_tools`. Attach policies with `PUT /v1/assistants/revisions/{revision_id}/policies`.
+  </Step>
+  <Step title="Activate the revision">
+    Call `POST /v1/assistants/{agent_id}/revisions/{revision_id}/activate`. Feather updates the assistant's `active_revision_id`. New conversations now use this revision.
+  </Step>
+  <Step title="Iterate safely">
+    To change behavior, create another revision, configure it, and activate it. Previous revisions remain available for rollback or audit — activate any of them to roll back.
+  </Step>
+</Steps>
+
+<Note>
+  Conversations pin the revision that was active when they were created (see
+  [How assistants map to conversations](#how-assistants-map-to-conversations)),
+  so activating a new revision never disrupts in-flight sessions.
+</Note>
+
+---
+
+## Key fields
+
+<AccordionGroup>
+  <Accordion title="Assistant-level fields">
+    | Field | Type | Description |
+    |---|---|---|
+    | `name` | string | Display name (e.g. `"Support Bot"`) |
+    | `description` | string | Internal description of the assistant's purpose |
+    | `active_revision_id` | string \| null | Points to the currently active revision; `null` until you activate one |
+    | `platform_tools` | object | Platform tools enabled for the assistant |
+    | `metadata` | object | Arbitrary key/value metadata |
+    | `max_active_calls` | integer | Concurrency cap for live voice calls |
+  </Accordion>
+  <Accordion title="Revision-level fields">
+    | Field | Type | Description |
+    |---|---|---|
+    | `system_prompt` | string | Core instruction set for the assistant's LLM |
+    | `persona` | string | Short persona description |
+    | `knowledge_base_refs` | array | Knowledge bases the assistant searches at runtime |
+    | `tool_refs` | array | Tools the assistant may call (each has a `kind`: `api`, `integration`, `util`, or `kb`) |
+    | `policy_refs` | array | Policies enforced on this revision (toggle with `policies_enabled`) |
+    | `platform_tools` | object | Enabled platform tools, keyed by tool name |
+    | `model_settings` | object | Model chain entry: `{ model, config }` |
+    | `channel_specific_config` | object | Per-channel overrides (see below) |
+    | `workflow_enabled` | boolean | Whether the bound workflow drives this revision |
+    | `memory_enabled` | boolean | Whether long-term memory is used |
+    | `context_variables` | array | Variables injected into the prompt at runtime |
+  </Accordion>
+</AccordionGroup>
+
+### `channel_specific_config`
+
+Some behaviors need to differ by channel. The `channel_specific_config` field accepts a map keyed by channel — `chat`, `sms`, `voice`, or `email` — letting you override the prompt, first-speaking behavior, and warm-transfer settings per channel without creating a separate assistant.
+
+<Tip>
+  Use `channel_specific_config` to add a channel-specific instruction addendum
+  rather than duplicating an entire system prompt. For example, append
+  `"Keep all responses under 160 characters."` for the `sms` channel only.
+</Tip>
+
+---
+
+## Platform tools
+
+Beyond the custom tools you attach via `tool_refs`, Feather provides built-in **platform tools** that any assistant can enable with no extra configuration. Fetch the catalog with `GET /v1/assistants/platform-tools/catalog` and enable tools per revision via the `platform_tools` field. The assistant-scoped catalog contains three tools:
+
+<CardGroup cols={3}>
+  <Card title="transfer_call" icon="phone-arrow-right">
+    Transfers the current call to another destination. Terminal — it ends the assistant's turn.
+  </Card>
+  <Card title="request_human_handoff" icon="user-check">
+    Hands the conversation off to a human. Sets the conversation to `waiting_for_human`.
+  </Card>
+  <Card title="end_session" icon="circle-stop">
+    Gracefully closes the conversation and ends the session.
+  </Card>
+</CardGroup>
+
+<Note>
+  Platform tools are terminal — they conclude the current turn. Additional
+  flow-control tools (such as advancing a workflow step) exist inside workflow
+  graphs but are not assistant-enableable and do not appear in the catalog.
+</Note>
+
+---
+
+## How assistants map to conversations
+
+When you create a conversation (`POST /v1/conversations`), you set `assistant_id`. Feather resolves the assistant's active revision at that moment and **pins it** to the conversation as `assistant_revision_id`. This means:
+
+- Subsequent changes to the assistant or its revisions do not affect the in-flight conversation.
+- Every turn in the conversation runs against the same pinned revision.
+- You can pin a specific revision explicitly by passing `assistant_revision_id` on create.
+
+This pinning is what makes Feather safe for long-running sessions like multi-day email threads or complex support escalations.
+
+<Note>
+  Bind a conversation to **either** a single assistant (`assistant_id`) **or** a
+  team (`team_id` + `team_revision_id`), never both.
+</Note>
+
+---
+
+## Teams
+
+Group multiple assistants into a **team** to enable multi-agent routing. A team revision defines a routing mode, a set of member assistants, and a required fallback member. Feather supports two routing modes:
+
+<CardGroup cols={2}>
+  <Card title="supervisor" icon="sitemap">
+    A supervisor evaluates each incoming turn and delegates to the most appropriate member assistant. Ideal when you have specialized assistants (billing, technical, general) and want intelligent routing.
+  </Card>
+  <Card title="swarm" icon="arrows-spin">
+    Members hand off directly to one another as the conversation evolves, up to `swarm_max_hops`. Useful for collaborative flows where control passes between peers.
+  </Card>
+</CardGroup>
+
+Each team member references an `assistant_id` (and optionally pins an `assistant_revision_id`). Teams version through revisions too, but you make a team revision live with `POST /v1/teams/{team_id}/set-active-revision`. A conversation can bind to a team instead of a single assistant — Feather handles routing internally.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build your first assistant" icon="rocket" href="/guides/build-your-first-assistant">
+    A step-by-step guide to creating an assistant, configuring a revision, and running your first conversation.
+  </Card>
+  <Card title="Assistants API reference" icon="code" href="/api-reference/assistants/list-assistants-cursor-paginated">
+    Full reference for assistant and revision endpoints, including request schemas and response examples.
+  </Card>
+</CardGroup>

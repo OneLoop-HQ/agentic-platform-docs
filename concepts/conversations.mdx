@@ -1,12 +1,12 @@
 ---
 title: "Conversations: Feather's Unified Session Model"
 sidebarTitle: "Conversations"
-description: "Conversations represent a continuous session between an end user and an agent. Every channel — voice, SMS, email, and API — maps to a conversation."
+description: "A conversation is a continuous session between an end user and an assistant. Every channel — chat, voice, SMS, and email — maps to the same conversation object."
 ---
 
-A conversation is the foundational unit of interaction in Feather. Whether a user sends a text message, speaks to a voice bot, submits an email, or calls your API directly, Feather represents that session as a single, consistent conversation object. This unified model means your analytics, audit logs, and escalation workflows behave the same way regardless of the channel.
+A conversation is the foundational unit of interaction in Feather. Whether a user chats through your app, speaks to a voice assistant, sends a text, or emails you, Feather represents that session as a single, consistent conversation object. This unified model means your analytics, audit logs, and escalation workflows behave the same way regardless of channel.
 
-## The Conversation Object
+## The conversation object
 
 Every conversation carries a consistent set of fields:
 
@@ -14,83 +14,90 @@ Every conversation carries a consistent set of fields:
 |---|---|---|
 | `id` | string | Unique conversation identifier |
 | `end_user_id` | string | The resolved identity of the user in this session |
-| `channel` | enum | `api`, `sms`, `voice`, or `email` |
+| `channel` | enum | `chat`, `sms`, `voice`, or `email` |
+| `surface` | enum | Where the session runs: `webchat_widget`, `direct_api`, `mcp`, `dashboard`, `simulation`, `phone_line`, or `mailbox` |
 | `status` | enum | Current lifecycle status (see below) |
 | `session_type` | enum | `live`, `test`, or `simulation` |
-| `assigned_agent_id` | string | The agent currently handling this conversation |
-| `pinned_revision_id` | string | The agent revision pinned at conversation creation |
-| `created_at` | timestamp | When the conversation was opened |
-| `updated_at` | timestamp | When the conversation last received activity |
+| `assistant_id` / `team_id` | string | The assistant or team bound to this conversation |
+| `revision_id` | string | The assistant revision pinned at creation (`team_revision_id` for teams) |
+| `external_id` | string | Optional caller-supplied thread key (see below) |
+| `created_at` / `updated_at` | timestamp | Creation and last-activity times |
+
+<Note>
+  `channel` and `surface` are assigned by Feather, not set by you. Creating a
+  conversation over the API always produces a `chat` conversation; SMS, voice,
+  and email conversations are created by their channel adapters.
+</Note>
 
 ---
 
-## Session Types
+## Session types
 
-Feather supports three session types that let you test and simulate behavior without affecting production data or metrics:
+Feather supports three session types so you can test and simulate behavior without affecting production data:
 
 <CardGroup cols={3}>
   <Card title="live" icon="bolt">
-    A real conversation with a real end user. Counts toward usage, triggers webhooks, and appears in production analytics.
+    A real conversation with a real end user. Counts toward usage and appears in production analytics. Programmatic (API-key) callers can only create `live` sessions.
   </Card>
   <Card title="test" icon="flask">
-    A developer-initiated session for integration testing. Runs the full agent stack but is excluded from production dashboards.
+    A developer session that runs the full assistant stack but is excluded from production dashboards. Created from the dashboard (or the `test-chat` endpoint).
   </Card>
   <Card title="simulation" icon="play">
-    A scripted replay used for evaluating agent revisions or policies before publishing. Simulation sessions are read-only and replay a fixed set of turns.
+    A scripted run used by simulation suites to evaluate assistant revisions before you activate them.
   </Card>
 </CardGroup>
 
 <Tip>
-  Use `test` sessions during CI/CD to verify that a new agent revision responds correctly to a set of seed messages before promoting it to `active`.
+  To exercise an assistant programmatically without polluting analytics, use a
+  dedicated non-production organization or the dashboard test chat. `POST /v1/conversations`
+  from an API key always creates a `live` session.
 </Tip>
 
 ---
 
-## Status Lifecycle
+## Status lifecycle
 
-A conversation moves through a defined set of statuses over its lifetime:
-
-```
-active
-  ├─→ waiting_for_human
-  │     └─→ active  (when human hands back)
-  ├─→ awaiting_approval
-  │     ├─→ active  (approved)
-  │     └─→ closed  (rejected)
-  └─→ closed
-```
+A conversation moves through a defined set of statuses:
 
 | Status | Meaning |
 |---|---|
-| `active` | The agent is processing turns normally. |
-| `waiting_for_human` | The agent has handed off to a human agent queue. The AI will not respond until a human returns control. |
-| `awaiting_approval` | A policy has paused the conversation pending a human reviewer's decision on a specific tool call or action. |
-| `closed` | The session has ended. No further turns can be submitted. |
+| `active` | The assistant is processing turns normally. |
+| `waiting_for_human` | The conversation was handed off to a human. The assistant will not respond until the handoff is resolved. |
+| `awaiting_approval` | A policy paused the turn pending a human's approval decision on a tool call or workflow step. |
+| `closed` | The session ended normally. No further turns can be submitted. |
+
+Voice and queued sessions add transient states such as `queued`, `ringing`, `pending_dispatch`, `paused`, and `transferred`. Terminal states are `closed`, `expired`, `error`, and `superseded`. Only non-terminal statuses accept a new turn.
 
 <Note>
-  A conversation in `waiting_for_human` or `awaiting_approval` still accepts incoming user messages — they are queued and will be delivered once the status returns to `active`.
+  When a turn response comes back with `session_status` of `awaiting_approval`
+  or `waiting_for_human`, stop sending new turns and poll
+  `GET /v1/conversations/{id}/messages` until the status returns to `active` or
+  the conversation closes.
 </Note>
 
 ---
 
 ## Turns
 
-Each exchange within a conversation is called a **turn**. A turn represents one complete round-trip: the user sends a message, and the agent produces a reply. Turns are appended to the conversation's `turns` array and are immutable once recorded.
+Each exchange within a conversation is a **turn**. You submit a turn with a single `user_message`, and the assistant produces a reply.
 
-Each turn contains:
+Submit a turn with `POST /v1/conversations/{id}/turns`:
+
+```json Request
+{ "user_message": "Hello, can you help me?" }
+```
+
+The response includes the assistant's `text`, the `session_status`, and `message_seqs` (the sequence numbers of the messages this turn produced). Ordering is by message `seq`, not by timestamp.
 
 <AccordionGroup>
-  <Accordion title="role">
-    Either `user` (the end user's message) or `assistant` (the agent's reply). System-generated messages (e.g. handoff notices) carry the `system` role.
+  <Accordion title="Evidence">
+    Set `include_evidence: true` on the turn request to receive the knowledge-base chunks used to generate the reply. Each evidence entry identifies the source document and chunk. Callers need the `CONVERSATIONS_READ` permission to see the full evidence view.
   </Accordion>
-  <Accordion title="content">
-    The text of the message. For voice channels, this is the transcript. For email, this is the plain-text body.
+  <Accordion title="Streaming">
+    `POST /v1/conversations/{id}/turns/stream` returns a Server-Sent Events stream. You receive `delta` events (token chunks), an optional `member` event when a team member becomes active, a final `complete` event with the full turn result, and an `error` event on failure.
   </Accordion>
-  <Accordion title="tool_calls">
-    An array of tool invocations the agent made during this turn. Each entry includes the tool name, input arguments, and the tool's response. This is present only on `assistant` turns where tools were used.
-  </Accordion>
-  <Accordion title="evidence">
-    An array of knowledge base chunks retrieved and used to generate this turn's response. Each entry includes the `chunk_id`, `kb_id`, similarity `score`, and the `text` snippet. Use this to audit retrieval quality or build citation UI.
+  <Accordion title="Concurrency">
+    A conversation processes one turn at a time. Submitting a turn while another is in flight returns `409` (retryable) — wait for the first to finish.
   </Accordion>
 </AccordionGroup>
 
@@ -98,71 +105,69 @@ Each turn contains:
 
 ## Channels
 
-All four Feather channels map to the same conversation model. The channel determines how messages arrive and how responses are delivered — the underlying session logic is identical.
+All four channels map to the same conversation model. The channel determines how messages arrive and how responses are delivered — the session logic is identical.
 
 <CardGroup cols={2}>
-  <Card title="API" icon="plug">
-    Submit turns via `POST /v1/conversations/{id}/turns`. Responses are returned synchronously or streamed via SSE. Ideal for web chat, mobile apps, and custom interfaces.
+  <Card title="Chat" icon="comments">
+    Create a conversation with `POST /v1/conversations` and submit turns via the API. Powers your web/mobile app and the embeddable webchat widget.
   </Card>
   <Card title="SMS" icon="mobile">
-    Feather receives inbound SMS via your configured phone number and delivers responses as outbound SMS. Each phone number maps to a persistent conversation per end user.
+    Feather receives inbound SMS on your configured phone number and sends outbound replies. Each number maps to a conversation per end user.
   </Card>
   <Card title="Voice" icon="phone">
-    Inbound and outbound calls are transcribed in real time. Feather generates spoken responses via TTS. Voice conversations support mid-call `transfer_call` to human agents.
+    Inbound and outbound calls are transcribed in real time and answered via TTS. Voice conversations support mid-call transfer to a human.
   </Card>
   <Card title="Email" icon="envelope">
-    Inbound emails create or continue a conversation thread. Feather replies from your configured sending domain. Email conversations support rich threading with full history context.
+    Inbound emails create or continue a conversation thread; Feather replies from your connected mailbox with full thread history as context.
   </Card>
 </CardGroup>
 
----
-
-## End Users and Identity Resolution
-
-Every conversation is associated with an `end_user_id`. Feather resolves user identity from channel-specific signals — a phone number for SMS, a caller ID for voice, an email address for email — using the identity resolution endpoint:
-
-```bash
-POST https://api-sandbox.featherhq.com/v1/identity/resolve
-```
-
-```json
-{
-  "channel": "sms",
-  "identifier": "+14155550123"
-}
-```
-
-If a matching end user record exists, Feather returns the `end_user_id` and any stored profile data. If no match is found, Feather creates a new end user record automatically and returns the new ID.
-
-This means that a user who contacts you via SMS and later via email can be linked into a single identity — giving your agents access to full cross-channel conversation history.
+See the [Channels](/concepts/channels) concept for how the channel, surface, and identity model fit together.
 
 ---
 
-## Human-in-the-Loop States
+## Threads and identity
 
-Two conversation statuses represent human-in-the-loop (HITL) scenarios:
+Every conversation is associated with an `end_user_id`. You control how a conversation resolves to an end user when you create it:
 
-### `waiting_for_human`
+- **`end_user_id`** — reference an existing end user directly. (An unknown ID returns `404`.)
+- **`org_external_end_user_id`** — pass your own stable identifier for the user (a customer ID or an anonymous browser token). Feather get-or-creates an end user for it and bridges it to any existing verified contact (email or phone) for the same person.
+- **Neither** — Feather resolves the authenticated caller as the end user.
 
-This status is set when an agent invokes the `transfer_call` platform tool or when a workflow reaches a `handoff` node. The conversation is routed to a human agent queue. Your human agents respond via the Feather dashboard or the `POST /v1/conversations/{id}/human-turns` endpoint. When the human returns control, status reverts to `active` and the AI agent resumes.
+### `external_id` — chat thread keys
 
-### `awaiting_approval`
-
-This status is set when a policy with action `require_approval` is triggered before a tool call. The conversation pauses and an approval request is created. A reviewer approves or rejects via `POST /v1/conversations/{id}/approvals/{approval_id}/resolve`. On approval, the tool call proceeds and status returns to `active`. On rejection, the turn is blocked and a safe message is returned to the user.
+By default there is one open conversation per end user on a given surface. Pass an `external_id` to run multiple concurrent threads for the same user: a new value opens a new thread, and reusing a value **resumes** that thread (which makes creation idempotent under retries). `external_id` is unique per organization for the life of the row.
 
 <Warning>
-  Conversations in `awaiting_approval` time out after a configurable period (default 24 hours). If no decision is made before the timeout, Feather automatically rejects the action and sends a fallback message to the end user. Configure the timeout at the policy level.
+  For anonymous webchat visitors, send a **stable per-visitor token** in
+  `org_external_end_user_id` (for example, a persisted browser ID). A fresh
+  value on every page load mints a new identity and loses conversation history
+  and memory.
 </Warning>
 
 ---
 
-## Next Steps
+## Human-in-the-loop states
+
+Two statuses represent human-in-the-loop (HITL) scenarios. Both are managed through the dedicated [HITL API](/guides/human-in-the-loop), not through the conversation endpoints.
+
+### `waiting_for_human`
+
+Set when an assistant requests a handoff (the `request_human_handoff` platform tool, a workflow handoff, or a policy `handoff` action). The conversation appears under `GET /v1/hitl/handoffs`. A human relays messages with `POST /v1/hitl/handoffs/{id}/messages` and ends the handoff with `POST /v1/hitl/handoffs/{id}/resolve`.
+
+### `awaiting_approval`
+
+Set when a policy with the `require_approval` action pauses a tool call. The pending item appears under `GET /v1/hitl/approvals`. A reviewer decides with `POST /v1/hitl/approvals/{id}/decide` (`{"decision": "approve"}` or `{"decision": "deny"}`). On approval the tool call proceeds; on denial the turn is blocked and a safe message is returned.
+
+---
+
+## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Run a Conversation" icon="comments" href="/guides/run-a-conversation">
-    A hands-on walkthrough of creating a conversation, submitting turns, and inspecting the response including tool calls and evidence.
+  <Card title="Run a conversation" icon="comments" href="/guides/run-a-conversation">
+    A hands-on walkthrough of creating a conversation, submitting turns, streaming, and polling.
   </Card>
-  <Card title="Conversations API Reference" icon="code" href="/api-reference/runtime-v2/list-v2-conversations">
-    Full reference for conversation, turn, identity, and approval endpoints.
+  <Card title="Conversations API reference" icon="code" href="/api-reference/conversations/get-or-create-a-v2-conversation">
+    Full reference for conversation, turn, and read endpoints.
   </Card>
 </CardGroup>

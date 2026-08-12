@@ -1,62 +1,64 @@
 ---
-title: "Run Multi-Turn Conversations with a Feather Agent"
+title: "Run Multi-Turn Conversations with a Feather Assistant"
 sidebarTitle: "Run Conversation"
-description: "Open a conversation session, send user messages, stream agent responses, and close the session when done — with full code examples."
+description: "Open a conversation, send user messages, stream assistant responses, poll for operator replies, and close the session — with full code examples."
 ---
 
-The Feather conversation API is built around **sessions** — stateful containers that track the full message history, context variables, and session lifecycle for a single end-user interaction. Within a session you can send synchronous turns, stream tokens over SSE for real-time UIs, poll for operator replies during a human handoff, and retrieve a paginated transcript at any time. This guide walks through each operation with working curl examples.
+The Feather conversation API is built around **conversations** — stateful sessions that track the full message history, context variables, and lifecycle for a single end-user interaction. Within a conversation you can send synchronous turns, stream tokens over SSE for real-time UIs, poll for operator replies during a human handoff, and retrieve a paginated transcript at any time. This guide walks through each operation with working examples.
 
 ---
 
-## Create a session
+## Create a conversation
 
-Open a new conversation session by associating an end user, a channel, and the agent you want to run.
+Open a conversation by binding an assistant and identifying the end user. Creating a conversation over the API always produces a `chat`, `live` session — `channel` and `surface` are assigned by Feather, not set by you.
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations \
+curl -X POST https://api-sandbox.featherhq.com/v1/conversations \
   -H "x-api-key: $FEATHER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "end_user_id": "550e8400-e29b-41d4-a716-446655440000",
-    "channel": "api",
     "assistant_id": "agt_01hx3k2mz9vbqwerty123456",
-    "session_type": "live"
+    "org_external_end_user_id": "customer-42"
   }'
 ```
 </CodeGroup>
 
 ```json
 {
-  "id": "conv_01hxabc987654321fedcba00",
-  "end_user_id": "550e8400-e29b-41d4-a716-446655440000",
-  "channel": "api",
+  "id": "ses_01hxabc987654321fedcba00",
+  "end_user_id": "usr_01hvbp4nrtemk6wjq8xcgdfy2s",
+  "channel": "chat",
+  "surface": "direct_api",
   "assistant_id": "agt_01hx3k2mz9vbqwerty123456",
+  "assistant_revision_id": "rev_01hx3k9pq7rstuv234567890",
   "status": "active",
   "session_type": "live",
-  "created_at": "2024-05-14T12:00:00Z"
+  "created_at": "2026-05-14T12:00:00Z"
 }
 ```
 
-| Field | Values | Description |
-|---|---|---|
-| `channel` | `api`, `web`, `email`, `sms` | The delivery channel for this conversation |
-| `session_type` | `live`, `test`, `simulation` | `live` sessions are persisted and trigger post-session processing; `test` sessions are sandboxed; `simulation` sessions back automated scenario runs |
-| `status` | `active`, `closed` | Lifecycle state of the conversation |
+| Field | Notes |
+|---|---|
+| `assistant_id` | The assistant to run. Bind a team instead with `team_id` + `team_revision_id` — never both. |
+| `org_external_end_user_id` | Your own stable identifier for the user. Feather get-or-creates an end user for it. Pass an existing `end_user_id` instead if you have one. |
+| `external_id` | Optional thread key — reuse it to resume a thread, or send a new value to open a concurrent one. |
 
 <Tip>
-  Pass a `context_variables` object in the request body to seed the conversation with pre-known data — for example, `{"customer_name": "Alex", "account_tier": "premium"}`. These values are injected into the agent's system prompt and tool calls automatically.
+  Pass a `context_variables` object in the request body to seed the conversation
+  with pre-known data — for example, `{"customer_name": "Alex", "account_tier": "premium"}`.
+  These values are available to the assistant's prompt and tools.
 </Tip>
 
 ---
 
 ## Send turns (synchronous)
 
-For standard request/response flows, post a turn and wait for the full agent reply.
+For standard request/response flows, post a turn and wait for the full reply.
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc987654321fedcba00/turns \
+curl -X POST https://api-sandbox.featherhq.com/v1/conversations/ses_01hxabc987654321fedcba00/turns \
   -H "x-api-key: $FEATHER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -67,24 +69,28 @@ curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc9
 
 ```json
 {
-  "turn_id": "turn_01hxbcd111222333444aaaa",
-  "conversation_id": "conv_01hxabc987654321fedcba00",
+  "turn_id": "trn_01hxbcd111222333444aaaa",
+  "conversation_id": "ses_01hxabc987654321fedcba00",
   "text": "I'd be happy to help with order #12345! Let me look that up for you right now.",
   "session_status": "active",
-  "message_seqs": [2, 3]
+  "message_seqs": [2, 3],
+  "ended": false
 }
 ```
 
 | Field | Description |
 |---|---|
 | `turn_id` | Unique identifier for this turn |
-| `conversation_id` | The conversation this turn belongs to |
-| `text` | The agent's final reply text |
-| `session_status` | Current conversation status (`active`, `waiting_for_human`, `closed`) |
-| `message_seqs` | Sequence numbers of the messages written in this turn — use as a `since_seq` watermark |
+| `text` | The assistant's final reply |
+| `session_status` | Current status (`active`, `awaiting_approval`, `waiting_for_human`, `closed`, …) |
+| `message_seqs` | Sequence numbers of the messages written this turn — order by `seq`, not timestamp |
+| `ended` | `true` if the assistant closed the conversation this turn |
 
 <Note>
-  If `session_status` changes to `waiting_for_human`, the agent has triggered a human handoff. No further AI replies will be generated until an operator responds or the session is returned to the bot.
+  If `session_status` becomes `waiting_for_human` or `awaiting_approval`, stop
+  sending turns and poll for messages (below) until it returns to `active` or the
+  conversation closes. Set `include_evidence: true` on the request to receive the
+  knowledge-base chunks used to generate the reply.
 </Note>
 
 ---
@@ -95,7 +101,7 @@ For chat UIs where you want to render tokens as they arrive, use the streaming e
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc987654321fedcba00/turns/stream \
+curl -X POST https://api-sandbox.featherhq.com/v1/conversations/ses_01hxabc987654321fedcba00/turns/stream \
   -H "x-api-key: $FEATHER_API_KEY" \
   -H "Content-Type: application/json" \
   --no-buffer \
@@ -106,7 +112,7 @@ curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc9
 
 ```javascript JavaScript
 const response = await fetch(
-  'https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc987654321fedcba00/turns/stream',
+  'https://api-sandbox.featherhq.com/v1/conversations/ses_01hxabc987654321fedcba00/turns/stream',
   {
     method: 'POST',
     headers: {
@@ -165,38 +171,35 @@ event: delta
 data: {"text":"#12345 was "}
 
 event: delta
-data: {"text":"shipped on May 13th "}
-
-event: delta
-data: {"text":"and is expected to arrive by May 16th."}
+data: {"text":"shipped on May 13th and is expected to arrive by May 16th."}
 
 event: complete
-data: {"turn_id":"turn_01hxbcd111222333444bbbb","conversation_id":"conv_01hxabc987654321fedcba00","text":"Your order #12345 was shipped on May 13th and is expected to arrive by May 16th.","active_assistant_id":"agt_01hx3k2mz9vbqwerty123456","path":"single","decision_source":"router","message_seqs":[4,5],"session_status":"active","turn_ttft_ms":312,"perceived_ttft_ms":340,"ended":false}
+data: {"turn_id":"trn_01hxbcd111222333444bbbb","conversation_id":"ses_01hxabc987654321fedcba00","text":"Your order #12345 was shipped on May 13th and is expected to arrive by May 16th.","active_assistant_id":"agt_01hx3k2mz9vbqwerty123456","session_status":"active","message_seqs":[4,5],"turn_ttft_ms":312,"ended":false}
 ```
 
-**Event types:**
-
-Each frame carries a named SSE `event:` line followed by a `data:` line — branch on the event name, not on any field inside the payload.
+**Event types** — branch on the SSE `event:` name, not on any field inside the payload:
 
 | SSE `event:` | Data payload |
 |---|---|
-| `delta` | `{"text": "..."}` — an incremental text token to append to the UI |
-| `complete` | The final turn object with its fields inline (`turn_id`, `conversation_id`, `text`, `session_status`, `message_seqs`, …) — treat this as the source of truth |
-| `error` | `{"error": "..."}` — a fatal error occurred; the stream closes immediately after this event |
+| `delta` | `{"text": "..."}` — an incremental token to append to the UI |
+| `member` | `{member_id, arrival_source, index}` — a team member became active |
+| `complete` | The final turn object with fields inline — treat this as the source of truth |
+| `error` | `{"error": "...", "retryable": true｜false}` — a fatal error; the stream closes after this event |
 
 <Warning>
-  Always handle the `error` event explicitly. If the stream closes without a `complete` event, assume the turn failed and surface an appropriate message to the user.
+  Always handle the `error` event explicitly. If the stream closes without a
+  `complete` event, assume the turn failed and surface an appropriate message.
 </Warning>
 
 ---
 
-## Poll messages (for async channels)
+## Poll messages (for async channels and handoffs)
 
-When your agent is connected to an asynchronous channel (email, SMS, or a human handoff queue) you need to poll for new messages rather than waiting on an open HTTP connection.
+When your assistant is connected to an asynchronous channel (email, SMS) or the conversation is in a human handoff, poll for new messages rather than holding an open HTTP connection.
 
 <CodeGroup>
 ```bash cURL
-curl "https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc987654321fedcba00/messages?since_seq=-1" \
+curl "https://api-sandbox.featherhq.com/v1/conversations/ses_01hxabc987654321fedcba00/messages?since_seq=-1" \
   -H "x-api-key: $FEATHER_API_KEY"
 ```
 </CodeGroup>
@@ -207,40 +210,38 @@ curl "https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc98765432
   "next_seq": 7,
   "messages": [
     {
-      "id": "msg_01hxbcd555666777888aaaa",
+      "seq": 6,
       "role": "assistant",
       "content": "I'm connecting you with a support specialist now. Please hold on.",
-      "authored_by": "agent",
-      "created_at": "2024-05-14T12:05:00Z"
+      "created_at": "2026-05-14T12:05:00Z"
     },
     {
-      "id": "msg_01hxbcd555666777888bbbb",
+      "seq": 7,
       "role": "assistant",
       "content": "Hi, this is Jamie from support. How can I help you today?",
-      "authored_by": "human_operator",
-      "created_at": "2024-05-14T12:06:45Z"
+      "created_at": "2026-05-14T12:06:45Z"
     }
   ]
 }
 ```
 
-Both AI and operator messages use `role: "assistant"`; distinguish them by `authored_by` — `"agent"` for AI-authored replies and `"human_operator"` for operator relays. The `role` enum is `user`, `assistant`, `system`, `tool`, or `system_event`.
-
-Pass `since_seq=-1` on the first request to retrieve all messages from the beginning. On subsequent polls, pass the `next_seq` value from the previous response to receive only new messages.
+Pass `since_seq=-1` on the first request to retrieve every message. On subsequent polls, pass the previous response's `next_seq` to receive only new messages. Both AI replies and human-operator relays arrive on this stream during a handoff.
 
 <Tip>
-  For human handoff workflows, poll every 2–5 seconds while `session_status` is `waiting_for_human`. Once it returns to `active`, the operator has handed control back to the agent and you can resume normal turn-based messaging.
+  During a handoff, poll every 2–5 seconds while `session_status` is
+  `waiting_for_human`. Once it returns to `active`, the operator has handed
+  control back and you can resume turn-based messaging.
 </Tip>
 
 ---
 
-## Close a session
+## Close a conversation
 
-Signal that the conversation is resolved by closing the session. This triggers any configured post-session webhooks, saves the conversation to long-term memory, and makes the session eligible for analytics processing.
+Signal that the conversation is resolved by closing it. This finalizes the session for memory sync, extraction, and analytics.
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc987654321fedcba00/close \
+curl -X POST https://api-sandbox.featherhq.com/v1/conversations/ses_01hxabc987654321fedcba00/close \
   -H "x-api-key: $FEATHER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,49 +250,38 @@ curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc9
 ```
 </CodeGroup>
 
-```json
-{
-  "id": "conv_01hxabc987654321fedcba00",
-  "status": "closed",
-  "closed_at": "2024-05-14T12:15:00Z"
-}
-```
-
 <Note>
-  A session **must be closed** before it can be deleted. Attempting to delete an active session will return a `409 Conflict` error.
+  A conversation **must be closed** before it can be deleted. Attempting to
+  delete a live conversation returns a `409 Conflict`.
 </Note>
 
 ---
 
-## Retrieve transcript
+## Retrieve the transcript
 
-Fetch a paginated list of all turns in a conversation — useful for post-session review, debugging, or exporting conversation logs.
+Fetch a paginated list of messages in a conversation — useful for post-session review, debugging, or exporting logs.
 
 <CodeGroup>
 ```bash cURL
-curl "https://api-sandbox.featherhq.com/v1/v2/conversations/conv_01hxabc987654321fedcba00/turns?limit=20" \
+curl "https://api-sandbox.featherhq.com/v1/conversations/ses_01hxabc987654321fedcba00/turns?limit=20" \
   -H "x-api-key: $FEATHER_API_KEY"
 ```
 </CodeGroup>
-
-Each element of `turns` is a single message row — one per message, carrying a `role` and `content` rather than a paired user/assistant turn.
 
 ```json
 {
   "turns": [
     {
-      "id": "msg_01hxbcd111222333444aaaa",
-      "session_id": "conv_01hxabc987654321fedcba00",
+      "seq": 0,
       "role": "user",
       "content": "I need help with my order #12345",
-      "created_at": "2024-05-14T12:01:00Z"
+      "created_at": "2026-05-14T12:01:00Z"
     },
     {
-      "id": "msg_01hxbcd111222333444bbbb",
-      "session_id": "conv_01hxabc987654321fedcba00",
+      "seq": 1,
       "role": "assistant",
       "content": "I'd be happy to help with order #12345! Let me look that up for you right now.",
-      "created_at": "2024-05-14T12:01:02Z"
+      "created_at": "2026-05-14T12:01:02Z"
     }
   ],
   "next_cursor": "dHVybl8wMWh4YmNkMTExMjIyMzMzNDQ0YmJiYg==",
@@ -299,17 +289,17 @@ Each element of `turns` is a single message row — one per message, carrying a 
 }
 ```
 
-Paginate by passing `cursor=<next_cursor>` and `limit=<n>` as query parameters. When `has_more` is `false`, you've reached the end of the transcript.
+Paginate by passing `cursor=<next_cursor>` and `limit=<n>`. When `has_more` is `false`, you've reached the end of the transcript. For a bulk, encrypted export across many conversations, use [Export Conversations](/guides/export-conversations).
 
 ---
 
 ## What's next?
 
 <CardGroup cols={2}>
-  <Card title="Conversations Concept Guide" icon="comment-dots" href="/concepts/conversations">
-    Deep dive into session lifecycle, message sequencing, and context variable propagation.
+  <Card title="Conversations concept" icon="comment-dots" href="/concepts/conversations">
+    Deep dive into the session model, status lifecycle, and thread keys.
   </Card>
-  <Card title="Human-in-the-Loop" icon="user-headset" href="/guides/human-in-the-loop">
-    Configure escalation rules, operator queues, and handoff triggers for live agent support.
+  <Card title="Human-in-the-loop" icon="user-check" href="/guides/human-in-the-loop">
+    Handle approvals and operator handoffs during a live conversation.
   </Card>
 </CardGroup>

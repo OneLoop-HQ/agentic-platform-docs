@@ -1,159 +1,170 @@
 ---
-title: "Knowledge Bases: Ground Agent Responses in Your Data"
+title: "Knowledge Bases: Grounding Assistants in Your Content"
 sidebarTitle: "Knowledge Bases"
-description: "Knowledge bases store and index your documents so agents can retrieve relevant content at runtime. Supports files, text, and connectors like Notion and Google Drive."
+description: "Knowledge bases are indexed document collections your assistants search at runtime. Ingest files and text, sync external sources, and retrieve semantically with sensitivity-aware access control."
 ---
 
-Knowledge bases give your agents access to your organization's content — product documentation, support articles, internal policies, FAQs, and more. At runtime, Feather performs semantic search across your indexed documents and injects the most relevant passages into the agent's context before it generates a response.
-
-## What Is a Knowledge Base?
-
-A knowledge base is a named collection of indexed documents. Each document is broken into chunks, embedded using a vector model, and stored in Feather's search index. When an agent receives a user message, it queries attached knowledge bases and retrieves the top-matching chunks to ground its response in your data rather than model hallucinations.
-
-Knowledge bases are created and managed independently of agents. You attach them to an agent revision via `knowledge_base_refs`, which means a single knowledge base can be shared across multiple agents.
-
----
-
-## The Ingestion Pipeline
-
-When you add a document to a knowledge base, Feather runs it through an asynchronous ingestion pipeline:
-
-<Steps>
-  <Step title="Upload content">
-    Submit a file (PDF, DOCX, TXT, HTML, Markdown) via `POST /v1/knowledge-base/knowledge-bases/{kb_id}/documents/upload`, or add raw text directly via `POST /v1/knowledge-base/knowledge-bases/{kb_id}/documents/text`.
-  </Step>
-  <Step title="Processing begins">
-    Feather queues the document for processing. The document's `ingestion_status` moves to `processing`. During this phase, Feather extracts text, splits it into overlapping chunks, and normalizes the content.
-  </Step>
-  <Step title="Embedding and indexing">
-    Each chunk is passed through Feather's embedding model to produce a vector representation. Vectors are written to the index alongside the original text and metadata. `ingestion_status` moves to `completed`.
-  </Step>
-  <Step title="Available for retrieval">
-    Once indexed, the document is immediately available for semantic search. If ingestion fails, `ingestion_status` moves to `failed` and an `error_detail` field explains the cause.
-  </Step>
-</Steps>
-
-### Polling ingestion status
-
-Because ingestion is asynchronous, you should poll the status endpoint before assuming a document is ready:
-
-```bash
-GET https://api-sandbox.featherhq.com/v1/knowledge-base/knowledge-bases/{kb_id}/ingestion-status
-```
-
-The response includes a per-document `status` field (`queued`, `processing`, `completed`, `failed`) and an overall `ready` boolean that is `true` only when all documents in the knowledge base have completed ingestion.
+A knowledge base (KB) is an indexed collection of documents that an assistant searches at runtime to ground its answers. You ingest content once, Feather chunks and embeds it asynchronously, and assistants retrieve the most relevant passages during a conversation.
 
 <Note>
-  Newly created knowledge bases with no completed documents will return no results from semantic search. Always confirm `ready: true` before attaching a knowledge base to a production agent revision.
+  Knowledge-base routes are nested under a doubled path:
+  `/v1/knowledge-base/knowledge-bases/...`. Semantic search is the exception —
+  it lives at `/v1/knowledge-base/search`.
+</Note>
+
+## Creating a knowledge base
+
+Create a KB with `POST /v1/knowledge-base/knowledge-bases`. Only `name` is required; the embedding model, chunking, and retrieval settings all have sensible defaults.
+
+```json Request
+{
+  "name": "Product Docs",
+  "description": "Public help-center articles",
+  "default_sensitivity_level": 0
+}
+```
+
+The response includes the `id`, the resolved `embedding_model` and `embedding_dimensions`, `document_count`, and the `default_sensitivity_level` floor (defaults to `10` = internal).
+
+---
+
+## Ingesting content
+
+All ingestion goes through one unified endpoint: `POST /v1/knowledge-base/knowledge-bases/{kb_id}/ingest`. It accepts a `multipart/form-data` request with two parts:
+
+- **`manifest`** (required) — a JSON array describing each item to ingest.
+- **`files`** (optional, repeatable) — file uploads, referenced from the manifest by `file_index`.
+
+Each manifest item is either a file or inline text:
+
+```json manifest
+[
+  { "type": "file", "file_index": 0, "title": "Billing FAQ" },
+  { "type": "text", "title": "Refund policy", "content": "Refunds are processed within..." },
+  { "type": "file", "file_index": 1, "title": "Updated Terms", "document_id": "<existing-doc-id>" }
+]
+```
+
+Pass `document_id` to ingest a new version of an existing document. To pull in web pages, use a connector (below) rather than the ingest endpoint — the manifest supports only `file` and `text`.
+
+The endpoint returns `202` with an `ingestion_job_id` and a per-item result of `queued` or `duplicate`.
+
+### Tracking ingestion
+
+Ingestion is asynchronous. Poll progress two ways:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /v1/knowledge-base/ingestion-jobs/{job_id}` | Job progress: per-state document counts and `progress_pct` |
+| `GET /v1/knowledge-base/knowledge-bases/{kb_id}/ingestion-status` | Aggregate document-state counts for the whole KB |
+
+A job moves through `queued` → `processing` → a terminal state of `completed`, `partial_failure`, `failed`, `duplicate`, or `quarantined`. Retry a failed or partially failed job with `POST /v1/knowledge-base/ingestion-jobs/{job_id}/retry`.
+
+<Note>
+  `ingestion-status` returns **counts** of documents in each state
+  (`pending`, `processing`, `active`, `draft`, `archived`, `failed`,
+  `quarantined`, `total`) — not a per-document list. For per-document detail,
+  call `GET .../ingestion-jobs/{job_id}/documents`.
 </Note>
 
 ---
 
-## Connectors
+## Semantic search
 
-Feather supports automated syncing from external content sources via **connectors**. When you configure a connector, Feather periodically polls the source and re-ingests documents that have changed.
+Query a KB with `POST /v1/knowledge-base/search`:
 
-<CardGroup cols={3}>
-  <Card title="Notion" icon="n">
-    Connect a Notion workspace and select pages or databases to sync. Feather re-indexes when page content changes.
-  </Card>
-  <Card title="Google Drive" icon="google-drive">
-    Sync files from a Google Drive folder. Supports Docs, Sheets (as text), and uploaded files.
-  </Card>
-  <Card title="Amazon S3" icon="aws">
-    Point Feather at an S3 bucket or prefix. New and updated objects are picked up on each sync cycle.
-  </Card>
-</CardGroup>
-
-<Tip>
-  Set a `sync_schedule` on the connector (e.g. `"0 * * * *"` for hourly) to control how often Feather pulls updates. For time-sensitive content like pricing or policies, use a frequent schedule or trigger a manual sync via `POST /v1/knowledge-base/connectors/{connector_id}/sync`.
-</Tip>
-
----
-
-## Semantic Search
-
-You can query any knowledge base directly — without going through an agent — using the search endpoint:
-
-```bash
-POST https://api-sandbox.featherhq.com/v1/knowledge-base/search
-```
-
-```json
+```json Request
 {
-  "kb_ids": ["kb_01abc123"],
-  "query": "What is the refund policy for annual subscriptions?",
-  "top_k": 5
+  "query": "How do I cancel my subscription?",
+  "kb_ids": ["<kb-id>"],
+  "limit": 10,
+  "rerank": true
 }
 ```
 
-The response returns a ranked list of chunks, each with:
+| Field | Type | Notes |
+|---|---|---|
+| `query` | string (required) | The natural-language query |
+| `kb_ids` | string[] (required) | One or more KBs to search |
+| `limit` | integer | Number of chunks to return (default `30`, max `100`) |
+| `rerank` | boolean | Apply a reranking pass (default `false`) |
+| `alpha` | number | Hybrid dense/sparse weighting, `0.1`–`1.0` (default `0.5`; `1.0` = dense-only) |
+| `prefer_draft` | boolean | Search the latest draft of each document |
 
-- `chunk_id` — unique identifier for the chunk
-- `document_id` — the source document
-- `score` — cosine similarity score (0–1)
-- `text` — the raw chunk content
-- `metadata` — document title, source URL, page number, etc.
-
-This endpoint is useful for testing retrieval quality before deploying an agent, or for building custom retrieval pipelines outside of a conversation.
-
----
-
-## Sensitivity Classification
-
-Every knowledge base has a `sensitivity` level that controls which agents (and which users) can access its content:
-
-| Level | Description |
-|---|---|
-| `public` | No restrictions. Any agent may access this knowledge base. |
-| `internal` | Accessible to agents with `internal` or higher clearance. |
-| `confidential` | Accessible to agents with `confidential` or higher clearance. |
-| `restricted` | Accessible only to agents with `restricted` clearance. |
-
-<Warning>
-  Sensitivity classification is a guardrail — it prevents agents from accidentally retrieving data above their clearance level. It is not a substitute for access controls on your underlying data systems. Always apply least-privilege principles when granting connector credentials.
-</Warning>
+Each result carries `content` (the chunk text), a `score`, and the source `document_id`, `document_title`, and `chunk_index`. The response also includes an **`answerability`** verdict — a `label` of `answerable`, `low_confidence`, `not_answerable`, or `unknown` — so you can tell whether the KB actually covers the question rather than just returning the closest chunks.
 
 ---
 
-## Access Control Lists (ACL)
+## Sensitivity and access control
 
-Beyond sensitivity levels, you can define fine-grained ACLs on individual knowledge bases. An ACL entry specifies:
+Feather grades every **document** with a sensitivity level, and every assistant revision with a matching clearance. Retrieval only returns documents at or below the assistant's clearance.
 
-- **Principal** — a user ID, agent ID, or role name
-- **Clearance level** — the maximum sensitivity the principal can access
-- **Permissions** — `read`, `write`, or `admin`
+| Level | Value | Meaning |
+|---|---|---|
+| `public` | 0 | Anyone can retrieve it |
+| `internal` | 10 | Default floor for new documents |
+| `confidential` | 20 | Sensitive business content |
+| `restricted` | 30 | Most sensitive content |
 
-ACLs let you share a single knowledge base across teams while restricting which parts of your organization can modify or re-index it.
+A document's stamped `sensitivity_level` is the maximum of three signals: the KB's `default_sensitivity_level` floor, a PII-based floor, and an LLM classifier. An assistant revision's `kb_clearance_level` (one of `0`, `10`, `20`, `30`) then gates retrieval: it sees any document whose `sensitivity_level` is **less than or equal to** its clearance. So a `restricted` (30) assistant sees everything, while a `public` (0) assistant sees only public documents.
+
+<Note>
+  Sensitivity is **per document**, not per knowledge base — a KB only sets a
+  default floor. New documents can enter a review queue
+  (`classification_status` of `pending_review`); approve them with
+  `POST .../documents/{doc_id}/classification/approve`.
+</Note>
+
+### Organization ACL
+
+Beyond per-document sensitivity, an organization-level ACL maps your Clerk roles to clearance levels and audience groups (`GET`/`PUT /v1/knowledge-base/acl/config`). Enforcement is gated behind a rollout you control with a preflight check and explicit enable/disable (`POST .../acl/rollout/preflight`, `.../enable`, `.../disable`).
 
 ---
 
-## Attaching Knowledge Bases to Agents
+## External sources (connectors)
 
-Knowledge bases are attached to an agent at the revision level via `knowledge_base_refs`:
+Instead of uploading files, connect an external source and let Feather sync it. Sources live under a KB: `POST /v1/knowledge-base/knowledge-bases/{kb_id}/sources`. Supported providers:
+
+<CardGroup cols={2}>
+  <Card title="Notion" icon="book">
+    Sync pages and databases. Requires an active Notion integration connection.
+  </Card>
+  <Card title="Google Drive" icon="google-drive">
+    Sync files and folders. Requires an active Google Drive integration connection.
+  </Card>
+  <Card title="Amazon S3" icon="aws">
+    Sync objects from a bucket. Provide access-key or role credentials inline.
+  </Card>
+  <Card title="Web (URL)" icon="globe">
+    Crawl and index web pages. No connection required.
+  </Card>
+</CardGroup>
+
+Within a source you define **roots** — the specific pages, folders, buckets, or URLs to sync. Trigger a manual sync with `POST .../sources/{source_id}/sync`, or schedule automatic syncs with `PATCH .../sources/{source_id}/schedule` by setting `auto_sync_enabled` and a `sync_interval_seconds`.
+
+---
+
+## Attaching a KB to an assistant
+
+Add a KB to an assistant revision via the `knowledge_base_refs` field. Each ref is `{ id, description?, clearance_level? }`. The optional per-ref `clearance_level` can only **lower** the effective clearance for that KB below the revision's `kb_clearance_level` — never raise it.
 
 ```json
 {
   "knowledge_base_refs": [
-    { "kb_id": "kb_01abc123", "retrieval_top_k": 5 },
-    { "kb_id": "kb_01def456", "retrieval_top_k": 3 }
+    { "id": "<kb-id>", "description": "Product help center" }
   ]
 }
 ```
 
-You can attach multiple knowledge bases to a single revision. Feather queries all attached knowledge bases in parallel and merges results, ranked by score, before injecting them into the agent's context.
-
-The optional `retrieval_top_k` field on each ref controls how many chunks are retrieved from that specific knowledge base per turn. Tune this value to balance context quality against token usage.
-
 ---
 
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Ingest Your Documents" icon="file-arrow-up" href="/guides/ingest-documents">
-    A step-by-step walkthrough of uploading files, configuring a connector, and verifying ingestion status.
+  <Card title="Ingest documents" icon="file-import" href="/guides/ingest-documents">
+    A hands-on guide to the unified ingest endpoint, polling jobs, and connecting external sources.
   </Card>
-  <Card title="Knowledge Base API Reference" icon="code" href="/api-reference/knowledge-base/list-knowledge-bases">
-    Full reference for knowledge base, document, connector, and search endpoints.
+  <Card title="Knowledge base API reference" icon="code" href="/api-reference/knowledge-base/create-a-knowledge-base">
+    Full reference for KB, document, ingestion, search, and connector endpoints.
   </Card>
 </CardGroup>

@@ -24,7 +24,9 @@ HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 HIDE_TAGS = {
     "warm-transfer",        # Twilio voice webhooks (vendor -> us)
     "benchmarking-internal",  # internal benchmarking sweeps
-    "voice-admin",          # /v1/internal/voice admin upserts
+    "voice-admin",          # /v1/voice/admin org-entitlement upserts (staff-only)
+    "voice-capacity-override",  # /v1/internal/voice capacity operational overrides
+    "platform-config",      # /v1/internal/platform-config staff config
 }
 
 # Individual operations to hide, keyed by (METHOD, path).

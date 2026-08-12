@@ -1,0 +1,80 @@
+---
+title: "Handle Email Conversations"
+sidebarTitle: "Email Channel"
+description: "Connect a Gmail or Microsoft mailbox, let your assistant draft replies, and approve them before they send — all as Feather conversations."
+---
+
+Feather can run customer email as a conversation channel. You connect a mailbox, inbound mail creates or continues a conversation thread, and your assistant drafts replies that you can review before they go out.
+
+## Connect a mailbox
+
+Connect a Gmail or Microsoft mailbox through hosted OAuth. Start the flow bound to an assistant (or team):
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/email/accounts/connect \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "agent_id": "<agent_id>", "login_hint": "support@example.com" }'
+```
+
+```json Response
+{ "authorize_url": "https://...", "state": "..." }
+```
+
+Send the user to `authorize_url` to grant access. Once connected, list your mailboxes:
+
+```bash
+curl https://api-sandbox.featherhq.com/v1/email/accounts \
+  -H "x-api-key: <your_api_key>"
+```
+
+Each account reports its `address`, `provider` (`gmail` or `microsoft`), and `status` (`pending`, `active`, `paused`, `error`, `needs_reauth`, or `retired`). Update the signature or re-bind the assistant with `PATCH /v1/email/accounts/{account_id}`.
+
+---
+
+## Drafts and approval
+
+Assistant replies are created as **drafts** so a human can review them before they send. A draft is authored against a conversation (`session_id`) and a connected `account_id`.
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/email/drafts \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "<conversation_id>",
+    "account_id": "<account_id>",
+    "mode": "copilot",
+    "subject": "Re: Order #12345",
+    "body_html": "<p>Thanks for reaching out — your order shipped today.</p>",
+    "to": [{ "address": "customer@example.com" }]
+  }'
+```
+
+`mode` is `human_only` (a human writes and sends) or `copilot` (the assistant drafts, a human approves). Approve and send a draft with:
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/email/drafts/<draft_id>/approve \
+  -H "x-api-key: <your_api_key>"
+```
+
+A draft moves through `draft` → `submitted` → `approved` → `sending` → `sent` (or `failed`/`discarded`). You can only edit a draft while it is in `draft`. List drafts for a conversation with `GET /v1/email/drafts?session_id=<id>`.
+
+---
+
+## Threads and delivery
+
+- `GET /v1/email/threads/{thread_id}` — the full thread: participants, subject, and every message.
+- `GET /v1/email/messages/{message_id}/events` — the delivery audit trail for a sent message (delivery status and events).
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Human-in-the-loop" icon="user-check" href="/guides/human-in-the-loop">
+    Approvals and handoffs — the same review pattern the email draft flow uses.
+  </Card>
+  <Card title="Channels" icon="comments" href="/concepts/channels">
+    How email fits the unified conversation model.
+  </Card>
+</CardGroup>

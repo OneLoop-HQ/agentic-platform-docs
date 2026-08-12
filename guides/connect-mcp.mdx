@@ -1,0 +1,61 @@
+---
+title: "Connect an MCP Client to Feather"
+sidebarTitle: "Connect MCP"
+description: "Feather exposes its capabilities as a Model Context Protocol server. Connect any MCP client to search knowledge, look up conversations, and manage assistants."
+---
+
+Feather is itself a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server. Any MCP client — Claude, an IDE, or your own agent — can connect to it and use Feather tools to search knowledge bases, look up conversations, list assistants, and more.
+
+<Note>
+  This is the reverse of a [custom MCP integration](/guides/connect-an-integration#connect-a-custom-mcp-server),
+  where Feather is the client connecting to *your* MCP server. Here, an external
+  client connects to *Feather's* MCP server.
+</Note>
+
+## Endpoint and transport
+
+Feather's MCP server is mounted at `/mcp` and speaks streamable HTTP:
+
+```
+https://api-sandbox.featherhq.com/mcp
+```
+
+The tools exposed cover assistants, analytics, conversations, evals, HITL, identity, knowledge bases, knowledge gaps, memory, policies, privacy, runtime, and workflows. Each tool enforces the same org scoping and permissions as the REST API.
+
+## Authenticate
+
+The MCP server accepts the same credentials as the REST API — a bearer token or `x-api-key` header — as well as **OAuth** for clients that support it.
+
+- **API key** — configure your client with the header `x-api-key: <your_api_key>`. Simplest for server-to-server clients.
+- **OAuth** — clients that support MCP OAuth can discover the authorization server automatically. An unauthenticated request to `/mcp` returns `401` advertising the protected-resource metadata URL (`/.well-known/oauth-protected-resource`), and the authorization-server metadata lives at `/.well-known/oauth-authorization-server`. Dynamic client registration is supported, and consent is granted interactively.
+
+To scope tool calls to a specific end user, pass an `x-end-user-id` header on the connection.
+
+<Warning>
+  Grant only the permissions the client needs. OAuth scopes map to Feather
+  permissions (for example `knowledge_bases:read`, `conversations:read`,
+  `assistants:manage`), and every tool additionally enforces its own permission
+  and org checks.
+</Warning>
+
+---
+
+## Related in-product assistants
+
+Two related surfaces let you work with Feather conversationally without wiring up your own client:
+
+- **Ask Feather** (`/v1/ask-feather`) — an in-product assistant that builds and edits assistants and answers platform questions. It runs async turns you stream over SSE.
+- **MCP chat** (`/v1/mcp-chat`) — a chat surface whose toolbelt is the Feather MCP server, so you can try the MCP tools directly. List tools with `GET /v1/mcp-chat/tools` and stream a turn with `POST /v1/mcp-chat/stream`.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Connect an integration" icon="plug" href="/guides/connect-an-integration">
+    Connect your own MCP server as a tool source for assistants.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Create the API key your MCP client will authenticate with.
+  </Card>
+</CardGroup>

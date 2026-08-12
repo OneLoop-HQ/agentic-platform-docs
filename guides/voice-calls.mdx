@@ -1,33 +1,38 @@
 ---
-title: "Build Voice Agents: Inbound and Outbound Calls"
+title: "Build Voice Assistants: Inbound and Outbound Calls"
 sidebarTitle: "Voice Calls"
-description: "Configure a voice pipeline, connect a phone number, and handle inbound and outbound calls with Feather's AI voice agents — including warm call transfer."
+description: "Configure a voice pipeline, set an audio-recording policy, connect a phone number, and handle inbound and outbound calls — including warm transfer."
 ---
 
-Feather's voice layer lets you deploy AI agents that speak and listen over real phone lines or directly in the browser. From a quick proof-of-concept web call to a production IVR with warm transfer to your support team — the same agent configuration powers it all. Voice sessions are fully transcribed, evaluated, and stored alongside your text conversations.
+Feather's voice layer lets you deploy AI assistants that speak and listen over real phone lines or directly in the browser. From a quick browser call to a production line with warm transfer to your support team, the same assistant configuration powers it all. Voice conversations are fully transcribed, evaluated, and stored alongside your text conversations.
 
 ## Prerequisites
 
 <Note>
-  Voice features require a connected **Twilio integration** to provision phone numbers and place calls. Follow the [Connect an Integration](/guides/connect-an-integration) guide to set up Twilio before proceeding. You'll also need at least one registered phone number (covered below).
+  Voice features require a connected **Twilio integration** to provision phone
+  numbers and place calls. Follow the [Connect an Integration](/guides/connect-an-integration)
+  guide to set up Twilio first. You'll also need at least one registered phone
+  number (covered below).
 </Note>
+
+---
+
+## Choose a voice
+
+Browse the available voices and audition them with their preview URLs:
+
+```bash
+curl "https://api-sandbox.featherhq.com/v1/voice/voices" \
+  -H "x-api-key: <your_api_key>"
+```
+
+Voices come from **ElevenLabs** and **Inworld**. List the available synthesis and transcription models with `GET /v1/voice/tts-models` and `GET /v1/voice/stt-models`. Once you've chosen a `voice_id`, create a pipeline config.
 
 ---
 
 ## Create a voice pipeline config
 
-A voice pipeline config controls how your agent sounds and behaves on a call — which voice it uses, what it says first, whether it can be interrupted mid-sentence, and more.
-
-Start by browsing available voices:
-
-```bash
-curl https://api-sandbox.featherhq.com/v1/voice/voices \
-  -H "x-api-key: <your_api_key>"
-```
-
-This returns a list of ElevenLabs-powered voices with preview URLs so you can audition them before committing.
-
-Once you've chosen a `voice_id`, create your pipeline config:
+A voice pipeline config controls how your assistant sounds — which voice it uses, the STT engine, language, and the opening greeting. Attach it to exactly one owner: an assistant (`agent_id`), a `team_id`, or a `persona_id`.
 
 <CodeGroup>
 ```bash cURL
@@ -38,100 +43,107 @@ curl -X POST https://api-sandbox.featherhq.com/v1/voice/configs \
     "voice_id": "<voice_uuid>",
     "agent_id": "<agent_id>",
     "stt_provider": "deepgram",
-    "interruptions_enabled": true,
     "language": "en",
     "first_speaker": "agent",
     "mode": "static",
     "text": "Hello, thanks for calling. How can I help you today?"
   }'
 ```
-
-```python Python
-import requests
-
-response = requests.post(
-    "https://api-sandbox.featherhq.com/v1/voice/configs",
-    headers={"x-api-key": "<your_api_key>"},
-    json={
-        "voice_id": "<voice_uuid>",
-        "agent_id": "<agent_id>",
-        "stt_provider": "deepgram",
-        "interruptions_enabled": True,
-        "language": "en",
-        "first_speaker": "agent",
-        "mode": "static",
-        "text": "Hello, thanks for calling. How can I help you today?"
-    }
-)
-print(response.json())
-```
-
-```typescript TypeScript
-const response = await fetch(
-  "https://api-sandbox.featherhq.com/v1/voice/configs",
-  {
-    method: "POST",
-    headers: {
-      "x-api-key": "<your_api_key>",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      voice_id: "<voice_uuid>",
-      agent_id: "<agent_id>",
-      stt_provider: "deepgram",
-      interruptions_enabled: true,
-      language: "en",
-      first_speaker: "agent",
-      mode: "static",
-      text: "Hello, thanks for calling. How can I help you today?",
-    }),
-  }
-);
-const data = await response.json();
-```
 </CodeGroup>
 
-**Response:**
-
-```json
+```json Response
 {
   "id": "vconf_01hxbz9k2mr4pn3q7wes",
   "voice_id": "<voice_uuid>",
   "agent_id": "<agent_id>",
   "stt_provider": "deepgram",
-  "interruptions_enabled": true,
   "language": "en",
   "first_speaking_config": {
     "first_speaker": "agent",
     "mode": "static",
     "text": "Hello, thanks for calling. How can I help you today?",
-    "instructions": null,
     "interruptible": true,
     "ai_disclosure_text": null
   },
-  "created_at": "2024-09-01T10:00:00Z"
+  "created_at": "2026-09-01T10:00:00Z"
 }
 ```
 
-The greeting fields you sent on the request (`first_speaker`, `mode`, `text`) are returned nested under `first_speaking_config` — they live on the agent's revision, not on the pipeline config row itself.
-
 | Field | Description |
 |---|---|
-| `stt_provider` | Speech-to-text engine. `deepgram` is recommended for low latency. |
-| `interruptions_enabled` | When `true`, callers can speak over the agent to interrupt it. |
-| `first_speaker` | `"agent"` to have the AI speak first; `"user"` to wait for the caller. |
-| `mode` | `"static"` uses the fixed `text` greeting; `"dynamic"` lets the agent generate its own opener. |
+| `voice_id` | The voice to synthesize with (required) |
+| `stt_provider` | Speech-to-text engine: `inworld` (default), `deepgram`, or `elevenlabs` |
+| `first_speaker` | `"agent"` to have the assistant speak first; `"user"` to wait for the caller |
+| `mode` | `"static"` uses the fixed `text` greeting; `"dynamic"` lets the assistant generate its opener |
+
+The greeting fields (`first_speaker`, `mode`, `text`) are returned nested under `first_speaking_config` — they live on the assistant's revision. For a reusable config you can share across assistants, use `/v1/voice/saved-configs` and link it with `PUT /v1/voice/assistants/{agent_id}/voice-config-source`.
+
+---
+
+## Tune call behavior
+
+Interruptions, silence handling, voicemail detection, DTMF, and background audio are configured on **call-settings**, separate from the pipeline config. Each owner has its own call-settings resource:
+
+- `GET`/`PATCH /v1/assistants/{agent_id}/revisions/{revision_id}/call-settings`
+- `GET`/`PATCH /v1/teams/{team_id}/call-settings`
+- `GET`/`PATCH /v1/personas/{persona_id}/call-settings`
+
+```bash
+curl -X PATCH \
+  https://api-sandbox.featherhq.com/v1/assistants/<agent_id>/revisions/<revision_id>/call-settings \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "interruptions_enabled": true,
+    "silence_timeout_ms": 8000,
+    "voicemail_detection_mode": "leave_message",
+    "voicemail_message": "Hi, this is a courtesy call from Acme — we will try again later.",
+    "recording_enabled": true
+  }'
+```
+
+Notable fields: `interruptions_enabled` (and thresholds like `interruption_min_words`), `silence_timeout_ms` / `silence_reminder_count`, `voicemail_detection_mode` (`off` or `leave_message`), `dtmf_enabled`, `background_audio_preset`, `recording_enabled`, and `transcription_storage_enabled`.
+
+---
+
+## Audio recording and privacy
+
+Whether call **audio** is retained — and in what form — is an organization-wide setting on the privacy config, distinct from the per-assistant `recording_enabled` capture toggle. Set it with `PUT /v1/privacy/config`:
+
+```bash
+curl -X PUT https://api-sandbox.featherhq.com/v1/privacy/config \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_retention_policy": "redacted",
+    "audio_redaction_fill": "tone_1khz",
+    "pii_scrubbing_enabled": true
+  }'
+```
+
+| `audio_retention_policy` | Behavior |
+|---|---|
+| `no_audio` | No recording is captured or stored. Playback is unavailable. |
+| `raw` | Full audio is stored and playable after the call finalizes. |
+| `redacted` | Audio is stored with PII spans muted (filled with silence or a 1 kHz tone). Playback is blocked until the redaction pass succeeds. |
+
+<Warning>
+  `redacted` requires PII scrubbing to be enabled with at least one detector —
+  Feather rejects the config otherwise. The policy is pinned at capture time, so
+  changing it later does not retroactively expose or redact existing recordings.
+</Warning>
+
+Fetch a time-limited playback URL for a stored recording with `GET /v1/voice/recordings/{recording_id}/playback-url`. See [Privacy & Data Protection](/concepts/privacy) for the full PII and retention model.
 
 ---
 
 ## Register a phone number
 
-To receive inbound calls or place outbound calls from a real number, register it with Feather and bind it to an agent.
+To receive or place calls on a real number, register it with Feather and bind it to an assistant.
 
 <Steps>
   <Step title="Register the phone number">
-    <CodeGroup>
-    ```bash cURL
+    ```bash
     curl -X POST https://api-sandbox.featherhq.com/v1/communication/phone-numbers \
       -H "x-api-key: <your_api_key>" \
       -H "Content-Type: application/json" \
@@ -143,62 +155,21 @@ To receive inbound calls or place outbound calls from a real number, register it
       }'
     ```
 
-    ```python Python
-    requests.post(
-        "https://api-sandbox.featherhq.com/v1/communication/phone-numbers",
-        headers={"x-api-key": "<your_api_key>"},
-        json={
-            "phone_e164": "+15555550100",
-            "vendor": "twilio",
-            "vendor_mode": "byo",
-            "capabilities": ["voice", "sms"]
-        }
-    )
-    ```
-    </CodeGroup>
-
-    `vendor_mode: "byo"` means Bring Your Own — the number is already provisioned in your Twilio account.
-
-    **Response:**
-
-    ```json
-    {
-      "id": "pn_01hxc2m3nr5qp4r8xfgt",
-      "organization_id": "org_01hxc2m3nr5qp4r8xfgt",
-      "phone_e164": "+15555550100",
-      "vendor": "twilio",
-      "vendor_mode": "byo",
-      "capabilities": ["voice", "sms"],
-      "status": "active"
-    }
-    ```
+    `vendor_mode: "byo"` means Bring Your Own — the number is already provisioned in your Twilio account. The response returns the phone number `id` with `status: "active"`.
   </Step>
 
-  <Step title="Bind an agent to the number">
-    Create an inbound channel so that calls to this number are routed to your agent automatically.
+  <Step title="Bind an assistant to the number">
+    Create an inbound channel so calls to this number route to your assistant automatically.
 
-    <CodeGroup>
-    ```bash cURL
+    ```bash
     curl -X POST \
-      "https://api-sandbox.featherhq.com/v1/communication/phone-numbers/pn_01hxc2m3nr5qp4r8xfgt/channels" \
+      "https://api-sandbox.featherhq.com/v1/communication/phone-numbers/<phone_number_id>/channels" \
       -H "x-api-key: <your_api_key>" \
       -H "Content-Type: application/json" \
-      -d '{
-        "channel_type": "inbound_call",
-        "agent_id": "<agent_id>"
-      }'
+      -d '{ "channel_type": "inbound_call", "agent_id": "<agent_id>" }'
     ```
 
-    ```python Python
-    requests.post(
-        "https://api-sandbox.featherhq.com/v1/communication/phone-numbers/pn_01hxc2m3nr5qp4r8xfgt/channels",
-        headers={"x-api-key": "<your_api_key>"},
-        json={"channel_type": "inbound_call", "agent_id": "<agent_id>"}
-    )
-    ```
-    </CodeGroup>
-
-    Your phone number now routes directly to the AI agent. Call it to test.
+    Your number now routes directly to the assistant. Call it to test.
   </Step>
 </Steps>
 
@@ -206,10 +177,9 @@ To receive inbound calls or place outbound calls from a real number, register it
 
 ## Place an outbound call
 
-Programmatically dial a customer from a registered Feather number.
+Programmatically dial a customer from a registered number.
 
-<CodeGroup>
-```bash cURL
+```bash
 curl -X POST https://api-sandbox.featherhq.com/v1/voice/outbound \
   -H "x-api-key: <your_api_key>" \
   -H "Content-Type: application/json" \
@@ -220,153 +190,90 @@ curl -X POST https://api-sandbox.featherhq.com/v1/voice/outbound \
   }'
 ```
 
-```python Python
-requests.post(
-    "https://api-sandbox.featherhq.com/v1/voice/outbound",
-    headers={"x-api-key": "<your_api_key>"},
-    json={
-        "from_phone_number_id": "<phone_number_id>",
-        "to_phone_number": "+15555550123",
-        "agent_id": "<agent_id>"
-    }
-)
-```
-
-```typescript TypeScript
-await fetch("https://api-sandbox.featherhq.com/v1/voice/outbound", {
-  method: "POST",
-  headers: {
-    "x-api-key": "<your_api_key>",
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    from_phone_number_id: "<phone_number_id>",
-    to_phone_number: "+15555550123",
-    agent_id: "<agent_id>",
-  }),
-});
-```
-</CodeGroup>
-
-**Response:**
-
-```json
+```json Response
 {
+  "queued": true,
   "room_name": "feather-room-0hxc3n4mr7qp5s9ydfh",
   "dispatch_id": "disp_01hxc3n4mr7qp5s9ydfh",
-  "agent_name": "voice-worker-billing",
-  "session_id": "sess_01hxc3p5nr8qr6t0zegj"
+  "session_id": "ses_01hxc3p5nr8qr6t0zegj"
 }
 ```
 
-Use the `session_id` to look up the conversation transcript and evaluation results after the call ends.
+Use the `session_id` to look up the transcript and evaluation results after the call ends. You can pause, resume, or cancel outbound dispatch with `POST /v1/voice/outbound/pause` · `/resume` · `/cancel`, and restrict calling to business hours with `GET`/`PUT /v1/voice/call-window`.
 
 ---
 
-## Start a web call (browser-based testing)
+## Start a web call (browser testing)
 
-Before going to production, test your voice agent directly in a browser without needing a real phone number. Feather creates a LiveKit room and returns credentials you pass to the LiveKit client SDK.
+Test your voice assistant in a browser without a phone number. Feather creates a LiveKit room and returns credentials for the LiveKit client SDK.
 
-<CodeGroup>
-```bash cURL
+```bash
 curl -X POST https://api-sandbox.featherhq.com/v1/voice/web-call \
   -H "x-api-key: <your_api_key>" \
   -H "Content-Type: application/json" \
-  -d '{"agent_id": "<agent_id>"}'
+  -d '{ "agent_id": "<agent_id>" }'
 ```
 
-```python Python
-requests.post(
-    "https://api-sandbox.featherhq.com/v1/voice/web-call",
-    headers={"x-api-key": "<your_api_key>"},
-    json={"agent_id": "<agent_id>"}
-)
-```
-</CodeGroup>
-
-**Response:**
-
-```json
+```json Response
 {
   "livekit_url": "wss://feather.livekit.cloud",
   "access_token": "eyJhbGciOiJIUzI1NiJ9...",
   "room_name": "feather-room-0hxc3n4mr7qp5s9ydfh",
-  "session_id": "sess_01hxc3p5nr8qr6t0zegj"
+  "session_id": "ses_01hxc3p5nr8qr6t0zegj"
 }
 ```
 
-Connect from your frontend using the LiveKit JS SDK:
+Connect from your frontend:
 
 ```typescript
 import { Room } from "livekit-client";
 
 const room = new Room();
 await room.connect("<livekit_url>", "<access_token>");
-
-// Enable microphone to start speaking with the agent
-await room.localParticipant.setMicrophoneEnabled(true);
+await room.localParticipant.setMicrophoneEnabled(true); // start speaking
 ```
 
 ---
 
 ## Warm call transfer
 
-A **warm transfer** lets your AI agent put the customer on a brief hold, dial a human supervisor in the background, brief them on the situation, and then bridge the two parties together. The customer gets a seamless handoff; the human operator is never caught off guard.
+A **warm transfer** puts the customer on a brief hold, dials a human supervisor in the background, briefs them, and then bridges the two together — so the operator is never caught off guard.
 
 <Steps>
   <Step title="Register a bridge number">
-    Bridge numbers are the internal lines Feather dials when initiating a warm transfer. Register them at the org level using the Twilio number SID from your Twilio console.
+    Bridge numbers are the dedicated lines Feather uses to conference the two parties. Import one at the org level using its Twilio SID.
 
     ```bash
     curl -X POST https://api-sandbox.featherhq.com/v1/identity/org/bridge-numbers \
       -H "x-api-key: <your_api_key>" \
       -H "Content-Type: application/json" \
-      -d '{"twilio_number_sid": "<PN...>"}'
+      -d '{ "twilio_number_sid": "<PN...>", "integration_connection_id": "<conn_id>" }'
     ```
   </Step>
 
-  <Step title="Configure transfer targets in the agent">
-    Add a `transfer_call` block to your agent's `platform_tools` configuration. Each target defines a destination number, a display label, and the transfer mode.
-
-    ```json
-    {
-      "platform_tools": {
-        "transfer_call": {
-          "targets": [
-            {
-              "label": "Billing Team",
-              "destination": "+15555550200",
-              "mode": "warm"
-            },
-            {
-              "label": "Technical Support",
-              "destination": "+15555550201",
-              "mode": "warm"
-            }
-          ],
-          "warm": {
-            "max_dial_seconds": 30,
-            "hold_announcement_text": "One moment while I connect you."
-          }
-        }
-      }
-    }
-    ```
-
-    | Field | Description |
-    |---|---|
-    | `targets[].label` | The name the agent uses to identify and select this destination. |
-    | `targets[].destination` | E.164 phone number of the transfer target. |
-    | `targets[].mode` | `"warm"` to brief the agent first; `"cold"` for an immediate blind transfer. |
-    | `warm.max_dial_seconds` | How long to wait for the human to answer before abandoning the transfer. |
-    | `warm.hold_announcement_text` | Text-to-speech message played to the customer while on hold. |
+  <Step title="Define a transfer destination">
+    Configure the destination as a `call_transfer` tool (`POST /v1/tools` with `tool_type: "call_transfer"`) with a static E.164 `destination` or a dynamic destination resolved from an API tool. Attach it to your assistant revision like any other tool.
   </Step>
 
-  <Step title="Trigger a transfer">
-    When the agent determines a transfer is appropriate, it calls the `transfer_call` platform tool automatically. No additional code is needed — configure the tool and let the agent decide.
+  <Step title="Let the assistant transfer in-call">
+    When a transfer is warranted, the assistant triggers it in-call via the `transfer_call` platform tool or a workflow handoff node. In warm mode, Feather holds the caller, dials the supervisor on the bridge line, plays an AI briefing they can accept or decline, and then conferences both parties. Inspect what happened with `GET /v1/voice/warm-transfer/{conversation_id}/transfer-detail`.
   </Step>
 </Steps>
 
-<Tip>
-  Use `GET /v1/voice/voices` to browse all available ElevenLabs voices, complete with preview audio URLs. Pick a voice that matches your brand tone before creating your pipeline config.
-</Tip>
+<Note>
+  If the supervisor leg never connects, the attempt lands in the failed-transfer
+  inbox (`GET /v1/hitl/failed-transfers`) so you can follow up.
+</Note>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Privacy & data protection" icon="shield-halved" href="/concepts/privacy">
+    Configure PII scrubbing, audio-retention policies, and data retention.
+  </Card>
+  <Card title="Voice API reference" icon="code" href="/api-reference/voice/list-voices">
+    Full reference for voice config, calling, recordings, and warm transfer.
+  </Card>
+</CardGroup>

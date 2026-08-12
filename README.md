@@ -1,55 +1,41 @@
-# Mintlify Starter Kit
+# Feather Docs
 
-Use the starter kit to get your docs deployed and ready to customize.
+The documentation site for [Feather](https://featherhq.com) — a unified customer experience platform API. Built on [Mintlify](https://mintlify.com).
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+## Structure
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
+- `docs.json` — site configuration and navigation.
+- `introduction.mdx`, `authentication.mdx`, `quickstart.mdx` — Get Started pages.
+- `concepts/*.mdx` — Core Concepts (assistants, knowledge bases, conversations, channels, memory, workflows, policies, privacy, analytics).
+- `guides/*.mdx` — task-based guides and per-channel guides.
+- `api-reference/` — the OpenAPI-driven API reference (see below).
+- `AGENTS.md` — writing conventions and terminology for contributors and AI tools.
 
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+## API reference
 
-## AI-assisted writing
+The **API Reference** tab is generated from an OpenAPI spec — one interactive page per endpoint.
 
-Set up your AI coding tool to work with Mintlify:
+- `api-reference/openapi.source.json` — the full upstream spec exported from the backend (source of truth).
+- `api-reference/openapi.json` — the **curated** spec Mintlify renders. Generated; do not edit by hand.
+- `scripts/build-docs-openapi.py` — produces the curated spec from the source, stripping internal/operational endpoints.
+
+To refresh after a backend release:
+
+1. Export the spec from the backend (`scripts/export_openapi.py`) and copy it to `api-reference/openapi.source.json`.
+2. Run `python3 scripts/build-docs-openapi.py`.
+3. Review the diff and adjust the `HIDE_*` rules in the script if the backend added new internal tags.
+
+## Local development
+
+Install the [Mintlify CLI](https://www.npmjs.com/package/mint) and run it from the repo root (where `docs.json` lives):
 
 ```bash
-npx skills add https://mintlify.com/docs
-```
-
-This command installs Mintlify's documentation skill for your configured AI tools like Claude Code, Cursor, Windsurf, and others. The skill includes component reference, writing standards, and workflow guidance.
-
-See the [AI tools guides](/ai-tools) for tool-specific setup.
-
-## Development
-
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
-
-```
 npm i -g mint
-```
-
-Run the following command at the root of your documentation, where your `docs.json` is located:
-
-```
 mint dev
 ```
 
-View your local preview at `http://localhost:3000`.
+Preview at `http://localhost:3000`. Check for broken links with `mint broken-links`.
 
-## Publishing changes
+## Publishing
 
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
-
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+Changes deploy automatically when merged to the default branch via the Mintlify GitHub app.

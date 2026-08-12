@@ -1,24 +1,21 @@
 ---
 title: Get Started with Feather in Under 5 Minutes
 sidebarTitle: Quickstart
-description: Make your first Feather API call, create an agent, and run a conversation end-to-end in just a few steps.
+description: Make your first Feather API call, create an assistant, and run a conversation end-to-end in just a few steps.
 ---
 
-Get up and running with Feather in minutes. This guide walks you through creating an API key, spinning up your first agent, and running a conversation end-to-end — no SDKs or dashboards required, just straightforward HTTP requests.
+Get up and running with Feather in minutes. This guide walks you through creating an API key, spinning up your first assistant, and running a conversation end-to-end — no SDKs or dashboards required, just straightforward HTTP requests.
 
 <Note>
-  You need a Feather account and your **organization ID** before you begin. All
-  requests in this guide target the sandbox environment at
-  `https://api-sandbox.featherhq.com`. Contact Feather to provision production
-  credentials.
+  You need a Feather account before you begin. All requests in this guide target
+  the sandbox environment at `https://api-sandbox.featherhq.com`. Contact Feather
+  to provision production credentials.
 </Note>
 
 <Steps>
 
   <Step title="Create an API key">
-    Every request to the Feather API must include a valid API key. Create one now by posting to `/v1/identity/api-keys` — you can name it anything that helps you remember what it is for.
-
-    <CodeGroup>
+    Every request to the Feather API must include a valid API key. Create one now by posting to `/v1/identity/api-keys`.
 
     ```bash Create API Key
     curl -X POST https://api-sandbox.featherhq.com/v1/identity/api-keys \
@@ -26,8 +23,6 @@ Get up and running with Feather in minutes. This guide walks you through creatin
       -H 'x-api-key: <your-bootstrap-or-org-token>' \
       -d '{"name": "quickstart"}'
     ```
-
-    </CodeGroup>
 
     ```json Response (201 Created)
     {
@@ -37,9 +32,8 @@ Get up and running with Feather in minutes. This guide walks you through creatin
       "key_prefix": "fth_live_4T8z",
       "scopes": [],
       "is_active": true,
-      "last_used_at": null,
       "expires_at": null,
-      "created_at": "2025-01-15T10:32:00Z"
+      "created_at": "2026-01-15T10:32:00Z"
     }
     ```
 
@@ -55,14 +49,10 @@ Get up and running with Feather in minutes. This guide walks you through creatin
   <Step title="Verify your identity">
     Confirm your key works and check which organization and role it belongs to by calling `GET /v1/identity/whoami`.
 
-    <CodeGroup>
-
     ```bash Verify Identity
     curl https://api-sandbox.featherhq.com/v1/identity/whoami \
       -H 'x-api-key: <your-key>'
     ```
-
-    </CodeGroup>
 
     ```json Response (200 OK)
     {
@@ -70,93 +60,97 @@ Get up and running with Feather in minutes. This guide walks you through creatin
       "email": "you@example.com",
       "role": "admin",
       "organization_id": "org_01hv3qxmpkyndzcwbt8fj6r90e",
-      "kb_clearance_level": 3,
-      "created_at": "2025-01-01T09:00:00Z"
+      "kb_clearance_level": 30
     }
     ```
 
-    Note your `organization_id` — you will need it when configuring agents and conversations in later steps.
-
     <Tip>
-      `kb_clearance_level` controls which knowledge-base documents your key can
-      retrieve. A higher number means access to more sensitive content tiers. See
-      the [Knowledge Bases](/concepts/knowledge-bases) concept page for details.
+      `kb_clearance_level` controls which knowledge-base documents your assistants
+      can retrieve. A higher number means access to more sensitive content tiers.
+      See the [Knowledge Bases](/concepts/knowledge-bases) concept for details.
     </Tip>
   </Step>
 
-  <Step title="Create an agent">
-    An agent is the AI brain behind your conversations. Create your first one by posting a name and description. Feather provisions the agent, creates an initial revision, and returns the IDs you need to start conversations.
+  <Step title="Create an assistant">
+    An assistant is the AI actor behind your conversations. Create one by posting a name and system prompt. Feather provisions the assistant, an initial revision, and a bound workflow — and returns all three.
 
-    <CodeGroup>
-
-    ```bash Create Agent
-    curl -X POST https://api-sandbox.featherhq.com/v1/agents \
+    ```bash Create Assistant
+    curl -X POST https://api-sandbox.featherhq.com/v1/assistants \
       -H 'x-api-key: <your-key>' \
       -H 'Content-Type: application/json' \
       -d '{
         "name": "Support Bot",
-        "description": "Answers customer questions about our product."
+        "description": "Answers customer questions about our product.",
+        "system_prompt": "You are a friendly support assistant. Answer concisely."
       }'
     ```
-
-    </CodeGroup>
 
     ```json Response (201 Created)
     {
-      "id": "agt_01hx2rp7tqkwn5cbms0evuy4dj",
-      "name": "Support Bot",
-      "description": "Answers customer questions about our product.",
-      "active_revision_id": "rev_01hx2rp7vznlm8fbqt9gscwo3k",
-      "is_active": true,
-      "created_at": "2025-01-15T10:35:00Z",
-      "updated_at": "2025-01-15T10:35:00Z"
+      "agent": {
+        "id": "agt_01hx2rp7tqkwn5cbms0evuy4dj",
+        "name": "Support Bot",
+        "active_revision_id": null
+      },
+      "agent_revision": {
+        "id": "rev_01hx2rp7vznlm8fbqt9gscwo3k",
+        "agent_id": "agt_01hx2rp7tqkwn5cbms0evuy4dj"
+      },
+      "workflow_revision_id": "wfr_01hx2rp7wy3nk9dbrs0abcd12"
     }
     ```
 
-    Save the agent `id` — you'll use it as the `assistant_id` when you start a conversation in the next step.
+    New assistants start **inactive** (`active_revision_id` is `null`). Save `agent.id` and `agent_revision.id` for the next step.
+  </Step>
+
+  <Step title="Activate the revision">
+    Make the assistant live by activating its initial revision. This points the assistant's `active_revision_id` at that revision so it can serve conversations.
+
+    ```bash Activate Revision
+    curl -X POST https://api-sandbox.featherhq.com/v1/assistants/agt_01hx2rp7tqkwn5cbms0evuy4dj/revisions/rev_01hx2rp7vznlm8fbqt9gscwo3k/activate \
+      -H 'x-api-key: <your-key>' \
+      -H 'Content-Type: application/json' \
+      -d '{"activation_reason": "quickstart"}'
+    ```
+
+    The assistant is now active. There is no separate "publish" step — activating a revision is what makes it live.
   </Step>
 
   <Step title="Start a conversation">
-    Open a new conversation session by posting to `/v1/v2/conversations`. Set `channel` to `"api"` for a programmatic session, and use `session_type: "test"` while you're developing so the session is flagged as non-production in your analytics.
-
-    <CodeGroup>
+    Open a conversation with `POST /v1/conversations`. Reference your assistant with `assistant_id`, and identify the end user with your own stable identifier via `org_external_end_user_id` — Feather creates the end user for you if it doesn't exist yet.
 
     ```bash Start Conversation
-    curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations \
+    curl -X POST https://api-sandbox.featherhq.com/v1/conversations \
       -H 'x-api-key: <your-key>' \
       -H 'Content-Type: application/json' \
       -d '{
-        "end_user_id": "usr_01hvbp4nrtemk6wjq8xcgdfy2s",
-        "channel": "api",
         "assistant_id": "agt_01hx2rp7tqkwn5cbms0evuy4dj",
-        "session_type": "test"
+        "org_external_end_user_id": "quickstart-user-1"
       }'
     ```
-
-    </CodeGroup>
 
     ```json Response (201 Created)
     {
       "id": "ses_01hxkqm3pj7ftv9rbew5cydnug",
       "end_user_id": "usr_01hvbp4nrtemk6wjq8xcgdfy2s",
-      "channel": "api",
+      "channel": "chat",
+      "surface": "direct_api",
       "assistant_id": "agt_01hx2rp7tqkwn5cbms0evuy4dj",
-      "session_type": "test",
+      "assistant_revision_id": "rev_01hx2rp7vznlm8fbqt9gscwo3k",
+      "session_type": "live",
       "status": "active",
-      "created_at": "2025-01-15T10:36:00Z"
+      "created_at": "2026-01-15T10:36:00Z"
     }
     ```
 
-    Copy the conversation `id` — you'll need it to send messages in the next step.
+    Copy the conversation `id` — you'll need it to send messages. API-key callers always create `chat`, `live` conversations.
   </Step>
 
   <Step title="Send a message">
-    Send the first user message by posting a turn to your conversation. Feather runs the message through your agent and returns the assistant's reply along with the updated session status.
-
-    <CodeGroup>
+    Send the first user message by posting a turn. Feather runs it through your assistant and returns the reply along with the session status.
 
     ```bash Send a Message
-    curl -X POST https://api-sandbox.featherhq.com/v1/v2/conversations/ses_01hxkqm3pj7ftv9rbew5cydnug/turns \
+    curl -X POST https://api-sandbox.featherhq.com/v1/conversations/ses_01hxkqm3pj7ftv9rbew5cydnug/turns \
       -H 'x-api-key: <your-key>' \
       -H 'Content-Type: application/json' \
       -d '{
@@ -164,40 +158,39 @@ Get up and running with Feather in minutes. This guide walks you through creatin
       }'
     ```
 
-    </CodeGroup>
-
-    ```json Response (200 OK)
+    ```json Response (201 Created)
     {
       "turn_id": "trn_01hxkqn8sv2gep0qmzr7byft4c",
-      "user_message": "Hello, can you help me?",
-      "text": "Hi there! Absolutely — I'm Support Bot, and I'm here to help. What can I assist you with today?",
+      "conversation_id": "ses_01hxkqm3pj7ftv9rbew5cydnug",
+      "text": "Hi there! Absolutely — I'm Support Bot, and I'm here to help. What can I do for you today?",
       "session_status": "active",
-      "created_at": "2025-01-15T10:36:05Z"
+      "message_seqs": [0, 1],
+      "ended": false
     }
     ```
 
-    You've just run your first end-to-end Feather conversation. The `session_status` field stays `"active"` while the conversation is ongoing. It transitions to `"completed"` or `"handed_off"` based on your agent's policies.
+    You've run your first end-to-end Feather conversation. Branch on `session_status`: while it's `active`, keep sending turns. If it becomes `awaiting_approval` or `waiting_for_human`, poll `GET /v1/conversations/{id}/messages` until it returns to `active` or closes.
   </Step>
 
 </Steps>
 
 ---
 
-## Next Steps
+## Next steps
 
-Now that you have a working agent and conversation, explore what else Feather can do.
+Now that you have a working assistant and conversation, explore what else Feather can do.
 
 <CardGroup cols={2}>
-  <Card title="Add a Knowledge Base" icon="database" href="/concepts/agents">
-    Connect a knowledge base to your agent so it can answer questions grounded in your own documents and data.
+  <Card title="Build a fuller assistant" icon="robot" href="/guides/build-your-first-assistant">
+    Attach a knowledge base and custom tools so your assistant answers grounded in your own data.
   </Card>
-  <Card title="Ingest Your Docs" icon="file-import" href="/guides/ingest-documents">
-    Upload files, crawl URLs, or sync from Notion and Google Drive to populate your knowledge base.
+  <Card title="Ingest your docs" icon="file-import" href="/guides/ingest-documents">
+    Upload files, crawl URLs, or sync from Notion and Google Drive to populate a knowledge base.
   </Card>
-  <Card title="Stream Responses" icon="bolt" href="/api-reference/runtime-v2/run-one-v2-conversation-turn-with-an-sse-response">
-    Use the streaming turns endpoint to deliver low-latency, token-by-token replies to your users.
+  <Card title="Stream responses" icon="bolt" href="/api-reference/conversations/run-one-v2-conversation-turn-with-an-sse-response">
+    Use the streaming turns endpoint to deliver low-latency, token-by-token replies.
   </Card>
-  <Card title="Evaluate Quality" icon="chart-bar" href="/guides/evaluations">
-    Run simulation suites and model-judge evaluators to measure and continuously improve agent performance.
+  <Card title="Evaluate quality" icon="chart-bar" href="/guides/evaluations">
+    Run simulation suites and model-judge evaluators to measure and improve performance.
   </Card>
 </CardGroup>

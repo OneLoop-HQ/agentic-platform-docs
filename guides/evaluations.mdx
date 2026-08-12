@@ -1,10 +1,10 @@
 ---
-title: "Evaluate and Test Your Agents with Feather Evals"
+title: "Evaluate and Test Your Assistants with Feather Evals"
 sidebarTitle: "Evaluations"
-description: "Create evaluators, bind them to agents, run simulation suites with AI personas, and use knowledge base eval suites to measure retrieval quality."
+description: "Create evaluators, bind them to assistants, run simulation suites with AI personas, and use knowledge base eval suites to measure retrieval quality."
 ---
 
-Shipping an agent without evaluation is like deploying code without tests. Feather's evaluation system gives you confidence that your agents respond accurately, helpfully, and on-brand — before and after every change. You can run automated judges on every live conversation, simulate hundreds of test scenarios with AI personas, and measure retrieval quality across your knowledge bases. All results feed back into a single quality dashboard so you know exactly where to improve.
+Shipping an assistant without evaluation is like deploying code without tests. Feather's evaluation system gives you confidence that your assistants respond accurately, helpfully, and on-brand — before and after every change. You can run automated judges on every live conversation, simulate hundreds of test scenarios with AI personas, and measure retrieval quality across your knowledge bases. All results feed back into a single quality dashboard so you know exactly where to improve.
 
 ---
 
@@ -93,9 +93,9 @@ const data = await response.json();
 
 ---
 
-## Bind an evaluator to an agent
+## Bind an evaluator to an assistant
 
-Bindings connect an evaluator to a specific agent. Once bound, every session for that agent automatically runs the evaluator — no extra code needed.
+Bindings connect an evaluator to a specific assistant. Once bound, every session for that assistant automatically runs the evaluator — no extra code needed.
 
 <CodeGroup>
 ```bash cURL
@@ -124,7 +124,7 @@ requests.post(
 ```
 </CodeGroup>
 
-**List all bindings for an agent:**
+**List all bindings for an assistant:**
 
 ```bash
 curl "https://api-sandbox.featherhq.com/v1/evaluator-bindings?agent_id=<agent_id>" \
@@ -139,7 +139,7 @@ curl "https://api-sandbox.featherhq.com/v1/evaluator-bindings?agent_id=<agent_id
 
 ## Simulation suites
 
-Simulation suites let you run automated conversations at scale before deploying changes. An AI persona plays the role of a customer, your agent responds, and the results are evaluated automatically — giving you a full quality report without involving real users.
+Simulation suites let you run automated conversations at scale before deploying changes. An AI persona plays the role of a customer, your assistant responds, and the results are evaluated automatically — giving you a full quality report without involving real users.
 
 <Steps>
   <Step title="Create a persona">
@@ -152,7 +152,7 @@ Simulation suites let you run automated conversations at scale before deploying 
       -H "Content-Type: application/json" \
       -d '{
         "name": "Frustrated Customer",
-        "body": "You are a frustrated customer who had a bad experience. Be direct and assertive. You want a resolution quickly and will push back if the agent deflects."
+        "body": "You are a frustrated customer who had a bad experience. Be direct and assertive. You want a resolution quickly and will push back if the assistant deflects."
       }'
     ```
 
@@ -162,7 +162,7 @@ Simulation suites let you run automated conversations at scale before deploying 
         headers={"x-api-key": "<your_api_key>"},
         json={
             "name": "Frustrated Customer",
-            "body": "You are a frustrated customer who had a bad experience. Be direct and assertive. You want a resolution quickly and will push back if the agent deflects."
+            "body": "You are a frustrated customer who had a bad experience. Be direct and assertive. You want a resolution quickly and will push back if the assistant deflects."
         }
     ).json()
     ```
@@ -170,7 +170,7 @@ Simulation suites let you run automated conversations at scale before deploying 
   </Step>
 
   <Step title="Create a scenario">
-    Scenarios define the situation: what the customer intends to accomplish and which agents are in scope.
+    Scenarios define the situation: what the customer intends to accomplish and which assistants are in scope.
 
     <CodeGroup>
     ```bash cURL
@@ -233,7 +233,7 @@ Simulation suites let you run automated conversations at scale before deploying 
   </Step>
 
   <Step title="Dispatch a suite run">
-    Kick off all simulations in the suite against a specific agent and channel.
+    Kick off all simulations in the suite against a specific assistant and channel.
 
     <CodeGroup>
     ```bash cURL

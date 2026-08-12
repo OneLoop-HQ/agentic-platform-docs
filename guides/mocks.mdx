@@ -1,0 +1,88 @@
+---
+title: "Mock External APIs for Testing"
+sidebarTitle: "Mocks"
+description: "Stand up fake HTTP endpoints that return canned responses, so you can test assistants and tools without calling real services."
+---
+
+A **mock** is a fake external HTTP endpoint, hosted by Feather at a per-organization URL, that returns responses you define. Point a tool at a mock instead of a real API and you can test your assistant's behavior deterministically — including error and edge cases — without side effects.
+
+## Create a mock
+
+Each mock has a `slug` (unique per org) and a default response for unmatched requests.
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/mocks \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "orders-api",
+    "name": "Orders API",
+    "default_status": 404,
+    "default_response_body": { "error": "not found" }
+  }'
+```
+
+```json Response
+{
+  "id": "mock_01hxn2p3qr5s8t0",
+  "slug": "orders-api",
+  "public_url_path": "/mocks/<organization_id>/orders-api",
+  "is_enabled": true
+}
+```
+
+The `public_url_path` is the base URL you paste into a tool's configuration. Prefix it with the sandbox host: `https://api-sandbox.featherhq.com/mocks/<organization_id>/orders-api`.
+
+---
+
+## Add scenarios
+
+A **scenario** is a match rule that returns a specific response when an incoming request matches it. Scenarios are evaluated by `priority` (lowest first); the first match wins, and unmatched requests fall back to the mock's default.
+
+```bash
+curl -X POST https://api-sandbox.featherhq.com/v1/mocks/<mock_id>/scenarios \
+  -H "x-api-key: <your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Order found",
+    "priority": 10,
+    "match_method": "GET",
+    "match_path_pattern": "/orders/{order_id}",
+    "response_status": 200,
+    "response_body": { "id": "12345", "status": "shipped" },
+    "delay_ms": 150
+  }'
+```
+
+Match on method, path pattern (Starlette syntax like `/orders/{order_id}`), headers, query, and JSON body. Reorder scenarios with `POST /v1/mocks/{mock_id}/scenarios/reorder`, or replace the whole set atomically with `PUT /v1/mocks/{mock_id}/scenarios`.
+
+---
+
+## Inspect traffic
+
+Every request that hits the mock is logged. Review recent traffic and drill into a single request:
+
+```bash
+# Recent requests (filter by status, method, path, matched-only, since)
+curl "https://api-sandbox.featherhq.com/v1/mocks/<mock_id>/requests?since=1h&matched_only=true" \
+  -H "x-api-key: <your_api_key>"
+
+# Full detail for one request
+curl "https://api-sandbox.featherhq.com/v1/mocks/requests/<request_id>" \
+  -H "x-api-key: <your_api_key>"
+```
+
+Use the log to confirm your assistant sent the request you expected and matched the scenario you intended. Disable a mock at any time with `POST /v1/mocks/{mock_id}/disable`.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build your first assistant" icon="robot" href="/guides/build-your-first-assistant">
+    Register a custom tool, then point its URL at a mock while you test.
+  </Card>
+  <Card title="Evaluations" icon="chart-bar" href="/guides/evaluations">
+    Combine mocks with simulation suites for fully deterministic test runs.
+  </Card>
+</CardGroup>

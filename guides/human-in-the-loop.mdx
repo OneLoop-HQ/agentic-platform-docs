@@ -1,19 +1,19 @@
 ---
-title: "Human-in-the-Loop: Approvals and Agent Handoffs"
+title: "Human-in-the-Loop: Approvals and Assistant Handoffs"
 sidebarTitle: "Human-in-Loop"
-description: "Pause agent conversations for human approval, hand off to a live operator, and relay messages back to end users — using Feather's HITL API."
+description: "Pause assistant conversations for human approval, hand off to a live operator, and relay messages back to end users — using Feather's HITL API."
 ---
 
-Not every decision should be left to an AI. Feather's Human-in-the-Loop (HITL) system lets you define exactly when a human needs to be in the conversation — whether that's approving a high-stakes action before the agent executes it, or handing the entire thread to a live support agent. Both modes keep the customer experience coherent: the user sees consistent messages and the operator has full context from the start.
+Not every decision should be left to an AI. Feather's Human-in-the-Loop (HITL) system lets you define exactly when a human needs to be in the conversation — whether that's approving a high-stakes action before the assistant executes it, or handing the entire thread to a live support agent. Both modes keep the customer experience coherent: the user sees consistent messages and the operator has full context from the start.
 
 ## Two HITL modes
 
 <CardGroup cols={2}>
   <Card title="Approvals" icon="circle-check">
-    The agent pauses mid-conversation before executing a tool call or workflow action. A human operator reviews the pending action, then approves or denies it. The agent automatically resumes with the decision and continues the conversation.
+    The assistant pauses mid-conversation before executing a tool call or workflow action. A human operator reviews the pending action, then approves or denies it. The assistant automatically resumes with the decision and continues the conversation.
   </Card>
   <Card title="Handoffs" icon="person-to-door">
-    The agent transfers the entire conversation to a human operator. The operator sends messages that are relayed directly to the end user. When the issue is resolved, the operator closes the handoff and the session ends gracefully.
+    The assistant transfers the entire conversation to a human operator. The operator sends messages that are relayed directly to the end user. When the issue is resolved, the operator closes the handoff and the session ends gracefully.
   </Card>
 </CardGroup>
 
@@ -21,7 +21,7 @@ Not every decision should be left to an AI. Feather's Human-in-the-Loop (HITL) s
 
 ## Handling approvals
 
-When a conversation reaches an action that requires sign-off, the agent enters `awaiting_approval` status and waits — it will not proceed until a decision is recorded.
+When a conversation reaches an action that requires sign-off, the assistant enters `awaiting_approval` status and waits — it will not proceed until a decision is recorded.
 
 <Steps>
   <Step title="List pending approval requests">
@@ -57,7 +57,7 @@ When a conversation reaches an action that requires sign-off, the agent enters `
   </Step>
 
   <Step title="Fetch full approval detail">
-    Retrieve the complete record for a specific approval — including the action payload the agent wants to execute.
+    Retrieve the complete record for a specific approval — including the action payload the assistant wants to execute.
 
     ```bash
     curl "https://api-sandbox.featherhq.com/v1/hitl/approvals/<approval_id>" \
@@ -72,14 +72,14 @@ When a conversation reaches an action that requires sign-off, the agent enters `
     | `conversation_id` | string | The conversation this approval belongs to |
     | `subject_kind` | enum | `workflow_node` or `tool_call` |
     | `subject_ref` | string | Identifier of the node or tool awaiting approval |
-    | `payload` | object | The full action payload the agent intends to execute |
+    | `payload` | object | The full action payload the assistant intends to execute |
     | `approver_role` | string | The operator role required to approve this action |
     | `suspend_message` | string | Message currently displayed to the end user |
     | `timeout_at` | ISO 8601 | When the request auto-expires if no decision is made |
   </Step>
 
   <Step title="Submit your decision">
-    Approve or deny the pending action. Include a `note` when denying so the agent can explain the outcome to the user.
+    Approve or deny the pending action. Include a `note` when denying so the assistant can explain the outcome to the user.
 
     <CodeGroup>
     ```bash Approve
@@ -102,7 +102,7 @@ When a conversation reaches an action that requires sign-off, the agent enters `
     ```
     </CodeGroup>
 
-    Once the decision is submitted, the conversation **automatically resumes**. If approved, the agent executes the action. If denied, the agent receives the denial note and responds to the user accordingly.
+    Once the decision is submitted, the conversation **automatically resumes**. If approved, the assistant executes the action. If denied, the assistant receives the denial note and responds to the user accordingly.
   </Step>
 </Steps>
 
@@ -110,7 +110,7 @@ When a conversation reaches an action that requires sign-off, the agent enters `
 
 ## Handling handoffs
 
-When an agent triggers a handoff, the conversation transitions to `waiting_for_human` status. The agent is no longer generating responses — a human operator takes over completely.
+When an assistant triggers a handoff, the conversation transitions to `waiting_for_human` status. The assistant is no longer generating responses — a human operator takes over completely.
 
 <Steps>
   <Step title="List pending handoffs">
@@ -131,14 +131,14 @@ When an agent triggers a handoff, the conversation transitions to `waiting_for_h
   </Step>
 
   <Step title="Review the handoff context">
-    Fetch the full handoff record to understand why the agent escalated and what the customer's situation is before you write your first message.
+    Fetch the full handoff record to understand why the assistant escalated and what the customer's situation is before you write your first message.
 
     ```bash
     curl "https://api-sandbox.featherhq.com/v1/hitl/handoffs/<handoff_id>" \
       -H "x-api-key: <your_api_key>"
     ```
 
-    The `packet` field contains everything the agent prepared for the handoff:
+    The `packet` field contains everything the assistant prepared for the handoff:
 
     ```json
     {
@@ -147,7 +147,7 @@ When an agent triggers a handoff, the conversation transitions to `waiting_for_h
       "status": "requested",
       "packet": {
         "static_text": "The customer is experiencing a billing discrepancy on their last invoice.",
-        "reason": "Issue requires access to billing backend — outside agent permissions.",
+        "reason": "Issue requires access to billing backend — outside assistant permissions.",
         "summary": "Customer Alex reported a $50 overcharge on invoice #INV-2024-0891. They have already tried self-service and need manual correction.",
         "transcript_ptr": {
           "conversation_id": "conv_01hxd3m5mr8qp6t0zdfh",
@@ -160,7 +160,7 @@ When an agent triggers a handoff, the conversation transitions to `waiting_for_h
     | Packet field | Description |
     |---|---|
     | `static_text` | A short briefing sentence visible at the top of the handoff card. |
-    | `reason` | Why the agent decided to escalate. |
+    | `reason` | Why the assistant decided to escalate. |
     | `summary` | A longer AI-generated summary of the conversation so far. |
     | `transcript_ptr` | Watermark pointer `{conversation_id, up_to_seq}` indicating the conversation message `seq` up to which the transcript had been captured at handoff time. |
   </Step>
@@ -188,7 +188,7 @@ When an agent triggers a handoff, the conversation transitions to `waiting_for_h
     ```
     </CodeGroup>
 
-    You can send as many messages as needed. The customer replies are visible by polling `GET /v1/v2/conversations/{id}/messages`.
+    You can send as many messages as needed. The customer replies are visible by polling `GET /v1/conversations/{id}/messages`.
   </Step>
 
   <Step title="Resolve the handoff">
@@ -203,7 +203,7 @@ When an agent triggers a handoff, the conversation transitions to `waiting_for_h
 </Steps>
 
 <Note>
-  Poll `GET /v1/v2/conversations/{id}/messages?since_seq={n}` to receive the end user's replies in real time during an active handoff. Pass the sequence number of the last message you've read as `since_seq` to receive only new messages.
+  Poll `GET /v1/conversations/{id}/messages?since_seq={n}` to receive the end user's replies in real time during an active handoff. Pass the sequence number of the last message you've read as `since_seq` to receive only new messages.
 </Note>
 
 ---
@@ -244,7 +244,7 @@ requests.put(
 
 ## Configuring HITL in workflows
 
-Approval and handoff behaviors are configured as nodes in your agent's workflow graph. Here's how both node types look in a workflow definition:
+Approval and handoff behaviors are configured as nodes in your assistant's workflow graph. Here's how both node types look in a workflow definition:
 
 <CodeGroup>
 ```json Approval Node

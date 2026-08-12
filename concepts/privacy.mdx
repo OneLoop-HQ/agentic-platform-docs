@@ -1,0 +1,92 @@
+---
+title: "Privacy & Data Protection"
+sidebarTitle: "Privacy"
+description: "Scrub PII, set audio-recording policies, and retain conversation data on your terms. Feather gives you organization-wide controls plus an audit trail."
+---
+
+Feather gives you organization-wide control over how sensitive data is detected, redacted, retained, and deleted. Privacy settings apply across text conversations, memory, and voice audio, and every scrub is recorded in an audit trail.
+
+## PII scrubbing
+
+Feather detects and redacts personally identifiable information using [Presidio](https://microsoft.github.io/presidio/). Configure it on the org privacy config with `GET`/`PUT /v1/privacy/config`:
+
+```json
+{
+  "pii_scrubbing_enabled": true,
+  "scrub_types": ["PHONE_NUMBER", "EMAIL_ADDRESS", "CREDIT_CARD"],
+  "score_threshold": 0.4,
+  "custom_deny_patterns": [
+    { "name": "internal_id", "regex": "ACME-\\d{6}", "replacement_label": "INTERNAL_ID", "score": 0.9 }
+  ],
+  "custom_allow_patterns": [
+    { "name": "public_sku", "regex": "SKU-\\d+" }
+  ]
+}
+```
+
+| Field | Purpose |
+|---|---|
+| `scrub_types` | The Presidio entity types to detect (e.g. `PHONE_NUMBER`, `EMAIL_ADDRESS`) |
+| `score_threshold` | Minimum detector confidence to redact (default `0.4`) |
+| `custom_deny_patterns` | Your own regexes to always redact |
+| `custom_allow_patterns` | Regexes to suppress false positives |
+
+---
+
+## Audio-recording policy
+
+For voice calls, the org privacy config also controls whether call **audio** is retained and in what form via `audio_retention_policy`:
+
+| Policy | Behavior |
+|---|---|
+| `no_audio` | No recording is captured or stored |
+| `raw` | Full audio is stored and playable |
+| `redacted` | PII spans in the audio are muted (with silence or a 1 kHz `audio_redaction_fill` tone); playback is blocked until redaction completes |
+
+<Warning>
+  `redacted` requires PII scrubbing to be enabled with at least one detector.
+  The policy is pinned when the audio is captured, so changing it later does not
+  retroactively alter existing recordings.
+</Warning>
+
+---
+
+## Data retention
+
+Control how long conversation data lives with **retention policies** (`/v1/retention-policies`). A policy sets how many days to keep turns and sessions and how to remove them:
+
+```json
+{
+  "name": "Standard 90-day",
+  "turn_retention_days": 90,
+  "session_retention_days": 365,
+  "archive_strategy": "soft_delete",
+  "is_default": true
+}
+```
+
+Your organization's `is_default` policy is attached to new conversations automatically, and an expiry is stamped when each conversation closes. With no default policy, nothing is deleted — retention is opt-in. `archive_strategy` is `soft_delete` or `hard_delete`.
+
+Knowledge-base documents have their own governance and retention controls (version governance status, retention policy, and a retrieval audit log) under `/v1/knowledge-base/...`.
+
+---
+
+## Audit trail
+
+Every scrub event is recorded. Query it with:
+
+- `GET /v1/privacy/audit-logs` — individual scrub events, filterable by time, `source` (`conversation_turn`, `memory_sync`, `voice_call`), and entity type.
+- `GET /v1/privacy/audit-stats` — aggregate detection counts and trends, bucketed by hour or day.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Voice calls" icon="phone" href="/guides/voice-calls">
+    Set the audio-recording policy and fetch redacted playback URLs.
+  </Card>
+  <Card title="Memory" icon="brain" href="/concepts/memory">
+    Read and delete the durable facts Feather stores about your users.
+  </Card>
+</CardGroup>
