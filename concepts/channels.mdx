@@ -12,7 +12,6 @@ Feather runs every customer interaction through the same [conversation](/concept
 |---|---|---|
 | `channel` | `chat`, `sms`, `voice`, `email` | The medium |
 | `surface` | `webchat_widget`, `direct_api`, `mcp`, `dashboard`, `simulation`, `phone_line`, `mailbox` | Where the session physically runs |
-| `origin` | `inbound`, `outbound` | Who initiated it |
 
 You don't set `channel` or `surface` directly — Feather assigns them based on how the conversation is created. Creating one over the API (`POST /v1/conversations`) always yields a `chat` conversation on the `direct_api` surface.
 
@@ -30,7 +29,7 @@ Each channel has its own entry point, but they all produce the same conversation
     Outbound via `POST /v1/sms/send`; inbound arrives on your Twilio number. Each number maps to a conversation per end user.
   </Card>
   <Card title="Voice" icon="phone" href="/guides/voice-calls">
-    Created by inbound calls to a bound number or by `POST /v1/voice/outbound`. Voice adds a `transport` of `sip` (phone) or `web` (browser).
+    Created by inbound calls to a bound number or by `POST /v1/voice/outbound` — over the phone (SIP) or in the browser (web).
   </Card>
   <Card title="Email" icon="envelope" href="/guides/email-channel">
     Inbound mail creates or continues a thread on the `mailbox` surface; replies go out from your connected mailbox.

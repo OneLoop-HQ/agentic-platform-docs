@@ -143,7 +143,7 @@ Get up and running with Feather in minutes. This guide walks you through creatin
     }
     ```
 
-    Copy the conversation `id` — you'll need it to send messages. API-key callers always create `chat`, `live` conversations.
+    Copy the conversation `id` — you'll need it to send messages. API-key callers always create `chat`, `live` conversations; passing `session_type: test` or `simulation` from an API key returns `422` (those run only from the dashboard).
   </Step>
 
   <Step title="Send a message">

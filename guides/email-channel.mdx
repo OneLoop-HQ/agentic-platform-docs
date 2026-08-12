@@ -43,14 +43,14 @@ curl -X POST https://api-sandbox.featherhq.com/v1/email/drafts \
   -d '{
     "session_id": "<conversation_id>",
     "account_id": "<account_id>",
-    "mode": "copilot",
+    "mode": "human_only",
     "subject": "Re: Order #12345",
     "body_html": "<p>Thanks for reaching out — your order shipped today.</p>",
     "to": [{ "address": "customer@example.com" }]
   }'
 ```
 
-`mode` is `human_only` (a human writes and sends) or `copilot` (the assistant drafts, a human approves). Approve and send a draft with:
+In v1, `mode` must be `human_only` — a human reviews and approves every draft before it sends. (`copilot`, which lets the assistant auto-draft, is reserved for a future release and currently returns `422`.) Approve and send a draft with:
 
 ```bash
 curl -X POST https://api-sandbox.featherhq.com/v1/email/drafts/<draft_id>/approve \

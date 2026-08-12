@@ -13,6 +13,7 @@ Feather detects and redacts personally identifiable information using [Presidio]
 ```json
 {
   "pii_scrubbing_enabled": true,
+  "audio_retention_policy": "raw",
   "scrub_types": ["PHONE_NUMBER", "EMAIL_ADDRESS", "CREDIT_CARD"],
   "score_threshold": 0.4,
   "custom_deny_patterns": [
@@ -30,6 +31,13 @@ Feather detects and redacts personally identifiable information using [Presidio]
 | `score_threshold` | Minimum detector confidence to redact (default `0.4`) |
 | `custom_deny_patterns` | Your own regexes to always redact |
 | `custom_allow_patterns` | Regexes to suppress false positives |
+
+<Note>
+  `PUT /v1/privacy/config` replaces the **entire** configuration, so send every
+  field you want to keep — omitted fields reset to their defaults.
+  `audio_retention_policy` is required on every request (see
+  [Audio-recording policy](#audio-recording-policy) below).
+</Note>
 
 ---
 

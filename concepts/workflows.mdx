@@ -30,9 +30,7 @@ There are two ways a workflow relates to an assistant:
     Create a workflow with `POST /v1/workflows`, then add a revision with `POST /v1/workflows/{workflow_id}/revisions`. A revision carries an `instructions` block describing each step in plain language. You can also scaffold one from a brief or template with `POST /v1/workflows/generate`.
   </Step>
   <Step title="Compile the revision">
-    Call `POST /v1/workflows/revisions/{revision_id}/compile`. The compiler parses your instructions and produces a `compiled_graph`. Choose a `compilation_strategy` of `fast`, `standard`, or `strong` to trade speed for thoroughness.
-
-    Compilation is asynchronous — poll the revision's `compilation_status`.
+    Compilation runs asynchronously. Scaffolding a revision from a brief with `POST /v1/workflows/generate` enqueues the compile pipeline for you (HTTP 202); pass a `compilation_strategy` of `fast`, `standard`, or `strong` to trade speed for thoroughness. Poll the revision's `compilation_status` until it's terminal, then review the result below.
   </Step>
   <Step title="Review the compiled graph">
     Inspect `compiled_graph` (and `quality_report`/`warnings`) to confirm Feather interpreted your instructions correctly, or edit it in the dashboard workflow editor. You can also apply incremental edits with `POST /v1/workflows/revisions/{revision_id}/graph/ops` and validate with `.../graph/validate`.
