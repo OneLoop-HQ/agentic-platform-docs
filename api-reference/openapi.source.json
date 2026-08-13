@@ -3,18 +3,8 @@
   "info": {
     "title": "CX Platform API",
     "description": "Unified customer experience platform API. Manages identity, conversations, memory, agents, procedures, policies, model routing, knowledge bases, integrations, and runtime execution.",
-    "version": "1.87.0"
+    "version": "1.90.0"
   },
-  "servers": [
-    {
-      "url": "https://api-sandbox.featherhq.com",
-      "description": "Sandbox"
-    },
-    {
-      "url": "http://localhost:8000",
-      "description": "Local dev"
-    }
-  ],
   "paths": {
     "/sms/inbound": {
       "post": {
@@ -188,7 +178,7 @@
         ],
         "summary": "Wait Music",
         "description": "``waitUrl`` for a bridge leg waiting for the second leg to join.\n\nTwilio's ``<Conference>`` fetches ``waitUrl`` via POST by default (the same verb it\nuses for every other webhook here), so the route must accept POST. GET is also\naccepted for manual/browser testing \u2014 the handler is side-effect free.",
-        "operationId": "wait_music_twilio_wait_music_get",
+        "operationId": "wait_music_twilio_wait_music_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -206,7 +196,7 @@
         ],
         "summary": "Wait Music",
         "description": "``waitUrl`` for a bridge leg waiting for the second leg to join.\n\nTwilio's ``<Conference>`` fetches ``waitUrl`` via POST by default (the same verb it\nuses for every other webhook here), so the route must accept POST. GET is also\naccepted for manual/browser testing \u2014 the handler is side-effect free.",
-        "operationId": "wait_music_twilio_wait_music_get",
+        "operationId": "wait_music_twilio_wait_music_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -17983,14 +17973,7 @@
             }
           },
           "409": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "The conversation is still live. Close it before deleting; a delete never terminates an in-flight conversation implicitly."
           },
           "422": {
             "description": "Validation Error",
@@ -18536,13 +18519,108 @@
         }
       }
     },
+    "/v1/conversations/{conversation_id}/trace/evidence": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Resolve exact trace observations for dashboard evidence",
+        "operationId": "getV2ConversationTraceEvidence",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "observation_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Repeat this parameter for each observation ID (maximum 100).",
+              "title": "Observation Id"
+            },
+            "description": "Repeat this parameter for each observation ID (maximum 100)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceEvidenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/conversations/{conversation_id}/trace/grouped": {
       "get": {
         "tags": [
           "conversations"
         ],
         "summary": "Get the customer-readable trace for a v2 conversation, nested Session\u2192Turn\u2192node\u2192step",
-        "description": "The nested tree variant of the session trace (Phase D), paginated by TURN. Same auth\n(TRACE_READ) + org scoping + terminal-session cache as the flat read. The full tree is built +\ncached once, then a window of ``limit`` turns from ``cursor`` is returned with a ``next_cursor``\nfor the next block (``None`` on the last page). ``header`` + session lane ride every page.",
+        "description": "The nested tree variant of the session trace (Phase D), paginated by TURN. Same auth\n(TRACE_READ) + org scoping + terminal-session cache as the flat read. The first page pins the\nordered turn roster while every page hydrates current turn content. A window of ``limit`` turns\nis returned with a ``next_cursor`` for the next block (``None`` on the last page). If an expired\nroster changed, the endpoint returns 409 so the client can restart rather than mix traversals.\n``header`` + session lane ride every page.",
         "operationId": "getV2ConversationTraceGrouped",
         "security": [
           {
@@ -18593,10 +18671,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Turn-pagination cursor: pass the previous page's ``next_cursor`` to load the next block of turns. Omit for the first page.",
+              "description": "Opaque turn-pagination cursor: pass the previous page's ``next_cursor`` to load the next block from the same turn roster. Omit for the first page.",
               "title": "Cursor"
             },
-            "description": "Turn-pagination cursor: pass the previous page's ``next_cursor`` to load the next block of turns. Omit for the first page."
+            "description": "Opaque turn-pagination cursor: pass the previous page's ``next_cursor`` to load the next block from the same turn roster. Omit for the first page."
           },
           {
             "name": "limit",
@@ -18661,6 +18739,16 @@
           },
           "404": {
             "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The pinned turn roster expired and the conversation's turn list changed since page one. Discard the accumulated pages and restart the traversal without a cursor; never append this response to an existing traversal.",
             "content": {
               "application/json": {
                 "schema": {
@@ -18822,7 +18910,7 @@
           "conversations"
         ],
         "summary": "List the per-turn engineering-waterfall summaries for a v2 conversation",
-        "description": "Session-level engineering list, reconstructed from Langfuse (ENG-689 T3).\n\nReplaces the retired self-hosted ``\u2026/telemetry`` list. Same row contract as the old\n``TurnTelemetryListItem`` so the frontend list is unchanged; the source is now Langfuse\nobservations rebuilt into the per-turn waterfall shape.",
+        "description": "Session-level engineering list reconstructed from stored observations.\n\nReplaces the retired self-hosted ``\u2026/telemetry`` list. Same row contract as the old\n``TurnTelemetryListItem`` so the frontend list is unchanged; stored observations are rebuilt\ninto the per-turn waterfall shape.",
         "operationId": "listV2ConversationEngineeringTurns",
         "security": [
           {
@@ -18878,7 +18966,7 @@
           "conversations"
         ],
         "summary": "Get the reconstructed engineering waterfall for a single v2 turn",
-        "description": "Per-turn engineering waterfall, reconstructed from Langfuse (ENG-689 T3).\n\nReplaces the retired self-hosted ``\u2026/turns/{turn_id}/telemetry`` read. Returns the\n``TurnState.to_telemetry_dict()`` artifact the rich waterfall UI already renders (full detail,\nPII-scrubbed per the org's config at emit time \u2014 ENG-686 T4).",
+        "description": "Per-turn engineering waterfall reconstructed from stored observations.\n\nReplaces the retired self-hosted ``\u2026/turns/{turn_id}/telemetry`` read. Returns the\n``TurnState.to_telemetry_dict()`` artifact the rich waterfall UI already renders (full detail,\nPII-scrubbed per the org's config at emit time \u2014 ENG-686 T4).",
         "operationId": "getV2ConversationEngineeringTurn",
         "security": [
           {
@@ -26387,7 +26475,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CursorPage_SimulationSuiteRunResponse_"
+                  "$ref": "#/components/schemas/CursorPage_SimulationSuiteRunSummaryResponse_"
                 }
               }
             }
@@ -62681,7 +62769,7 @@
           "created_at"
         ],
         "title": "ConsultTurnOut",
-        "description": "One scrubbed turn of the agent\u2194supervisor warm-transfer consult."
+        "description": "One durable agent\u2194supervisor warm-transfer consult turn."
       },
       "ContactResponse": {
         "properties": {
@@ -65839,38 +65927,6 @@
           "has_more"
         ],
         "title": "CursorPage[SimulationSuiteResponse]"
-      },
-      "CursorPage_SimulationSuiteRunResponse_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/SimulationSuiteRunResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "has_more": {
-            "type": "boolean",
-            "title": "Has More"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "has_more"
-        ],
-        "title": "CursorPage[SimulationSuiteRunResponse]"
       },
       "CursorPage_SimulationSuiteRunSummaryResponse_": {
         "properties": {
@@ -70198,7 +70254,7 @@
           "created_at"
         ],
         "title": "EngineeringTurnSummary",
-        "description": "Lightweight per-turn summary for the session-level engineering list (ENG-689 T3).\n\nReconstructed from Langfuse observations (the inverse of the T1 projector), this preserves the\nexact field set the retired ``TurnTelemetryListItem`` exposed so the frontend list contract is\nunchanged. ``created_at`` is the turn root's wall-clock start (the projector backdated every\nspan to it), not a DB insertion time."
+        "description": "Lightweight per-turn summary for the session-level engineering list (ENG-689 T3).\n\nReconstructed from PostgreSQL observations (the inverse of the T1 projector), this preserves the\nexact field set the retired ``TurnTelemetryListItem`` exposed so the frontend list contract is\nunchanged. ``created_at`` is the turn root's wall-clock start (the projector backdated every\nspan to it), not a DB insertion time."
       },
       "ErrorBreakdownByStatusRow": {
         "properties": {
@@ -75979,7 +76035,7 @@
           "url"
         ],
         "title": "InlineSource",
-        "description": "One ``{title, url}`` source link written INSIDE a KB document's text.\n\nExtracted at retrieval time by :mod:`src.knowledge_base.inline_sources` and\npersisted here because chunk text is unrecoverable at any read surface.\n\n``url`` is VERBATIM as the document wrote it and MAY BE RELATIVE\n(``uploads/x.pdf``). This is deliberately NOT ``external_uri``, and it is\ndeliberately NOT run through :func:`_safe_uri_or_none`: a scheme is not\nrequired here. This is a scoped exception recorded as **DD-010** in\n``docs/design-decisions.md`` \u2014 NOT a relaxation of DD-007, which governs a\ndifferent field (``external_uri``) and still requires a scheme. The value\nhere is a customer's own document link rendered in that customer's own\nwhite-label UI, which joins its own base. Executable schemes are still\nstripped, at extraction.\n\n``title`` is heuristic (markdown link text \u25b8 ``Link for X:`` label \u25b8 last path\nsegment). Accuracy is a later pass; the honesty rule is only that nothing is\ninvented \u2014 every value here was literally present in the document."
+        "description": "One ``{title, url}`` source link written INSIDE a KB document's text.\n\nExtracted at retrieval time by :mod:`src.knowledge_base.inline_sources` and\npersisted here because chunk text is unrecoverable at any read surface.\n\n``url`` is VERBATIM as the document wrote it and MAY BE RELATIVE\n(``uploads/x.pdf``). This is deliberately NOT ``external_uri``, and it is\ndeliberately NOT run through :func:`_safe_uri_or_none`: a scheme is not\nrequired here. This is the scoped exception in\n``docs/design-decisions/dd-010-verbatim-source-urls.md`` \u2014 NOT a relaxation\nof DD-007, which governs a\ndifferent field (``external_uri``) and still requires a scheme. The value\nhere is a customer's own document link rendered in that customer's own\nwhite-label UI, which joins its own base. Executable schemes are still\nstripped, at extraction.\n\n``title`` is heuristic (markdown link text \u25b8 ``Link for X:`` label \u25b8 last path\nsegment). Accuracy is a later pass; the honesty rule is only that nothing is\ninvented \u2014 every value here was literally present in the document."
       },
       "InputArgConfig": {
         "properties": {
@@ -91084,6 +91140,7 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 100,
             "title": "Agent Ids"
           }
         },
@@ -91167,6 +91224,7 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 100,
             "title": "Agent Ids"
           },
           "source_agent_name": {
@@ -91486,7 +91544,8 @@
                   "type": "string",
                   "format": "uuid"
                 },
-                "type": "array"
+                "type": "array",
+                "maxItems": 100
               },
               {
                 "type": "null"
@@ -99175,6 +99234,31 @@
         ],
         "title": "TopRetrievedDocumentRow"
       },
+      "TraceEvidenceResponse": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TraceStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "missing_observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Observation Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "title": "TraceEvidenceResponse",
+        "description": "Exact, tenant-scoped observations requested by dashboard focus IDs."
+      },
       "TraceNodeGroup": {
         "properties": {
           "node": {
@@ -99374,6 +99458,20 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Details"
+          },
+          "observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observation Ids"
+          },
+          "truncation": {
+            "items": {
+              "$ref": "#/components/schemas/TraceTruncation"
+            },
+            "type": "array",
+            "title": "Truncation"
           }
         },
         "additionalProperties": false,
@@ -99387,6 +99485,119 @@
         ],
         "title": "TraceStep",
         "description": "One row in the customer-readable session trace."
+      },
+      "TraceTruncation": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "original_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Bytes"
+          },
+          "stored_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stored Bytes"
+          },
+          "original_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Chars"
+          },
+          "original_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Type"
+          },
+          "original_leaves": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Leaves"
+          },
+          "stored_leaves": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stored Leaves"
+          },
+          "omitted_entries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omitted Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "TraceTruncation",
+        "description": "One size-control record attached to an observation payload."
       },
       "TraceTurn": {
         "properties": {
@@ -100143,7 +100354,7 @@
           "url"
         ],
         "title": "TurnSource",
-        "description": "One KB source link surfaced alongside a white-label assistant reply.\n\n``url`` is VERBATIM as the KB document wrote it and MAY BE RELATIVE\n(``uploads/<uuid>.pdf``) \u2014 the consumer joins its own base. Deliberately not\nscheme-validated the way ``EvidenceProvenance.external_uri`` is; a scoped\nexception recorded as **DD-010** in ``docs/design-decisions.md`` (not DD-007,\nwhich governs ``external_uri`` and still requires a scheme). Executable\nschemes are stripped upstream, at extraction.\n\n``title`` is heuristic (markdown link text \u25b8 ``Link for X:`` label \u25b8 last path\nsegment). Never invented: every value was literally present in the document or\nthe answer."
+        "description": "One KB source link surfaced alongside a white-label assistant reply.\n\n``url`` is VERBATIM as the KB document wrote it and MAY BE RELATIVE\n(``uploads/<uuid>.pdf``) \u2014 the consumer joins its own base. Deliberately not\nscheme-validated the way ``EvidenceProvenance.external_uri`` is; a scoped\nexception recorded in\n``docs/design-decisions/dd-010-verbatim-source-urls.md`` (not DD-007, which\ngoverns ``external_uri`` and still requires a scheme). Executable\nschemes are stripped upstream, at extraction.\n\n``title`` is heuristic (markdown link text \u25b8 ``Link for X:`` label \u25b8 last path\nsegment). Never invented: every value was literally present in the document or\nthe answer."
       },
       "TurnView": {
         "properties": {
@@ -100251,7 +100462,7 @@
           "trace"
         ],
         "title": "TurnWaterfallResponse",
-        "description": "Full per-turn engineering waterfall, reconstructed from Langfuse (ENG-689 T3).\n\n``trace`` is the ``TurnState.to_telemetry_dict()`` artifact the rich waterfall UI already\nrenders (the live playground SSE stream emits the same shape). It is metadata-only at the\nproduction tier and carries the debug-tier fields when debug capture was on for the turn,\nmirroring the old self-hosted ``debug_log``."
+        "description": "Full per-turn engineering waterfall reconstructed from stored observations.\n\n``trace`` is the ``TurnState.to_telemetry_dict()`` artifact the rich waterfall UI already\nrenders (the live playground SSE stream emits the same shape). It is metadata-only at the\nproduction tier and carries the debug-tier fields when debug capture was on for the turn,\nmirroring the old self-hosted ``debug_log``."
       },
       "UniqueConversationsRow": {
         "properties": {
@@ -101186,11 +101397,6 @@
             "type": "boolean",
             "title": "Recording Enabled",
             "default": true
-          },
-          "transcription_storage_enabled": {
-            "type": "boolean",
-            "title": "Transcription Storage Enabled",
-            "default": true
           }
         },
         "additionalProperties": false,
@@ -101562,17 +101768,6 @@
               }
             ],
             "title": "Recording Enabled"
-          },
-          "transcription_storage_enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transcription Storage Enabled"
           }
         },
         "additionalProperties": false,
